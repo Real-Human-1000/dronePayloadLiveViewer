@@ -7,15 +7,17 @@ import numpy as np
 import struct
 import random
 from time import time_ns
-
-# TODO: Make styling nicer, add record length box to index.html, add functionality to reset and init buttons in index.html
+from datetime import datetime
+import json
+import os
 
 # Some code taken from https://medium.com/the-research-nest/how-to-log-data-in-real-time-on-a-web-page-using-flask-socketio-in-python-fb55f9dad100
 # And https://projecthub.arduino.cc/ansh2919/serial-communication-between-python-and-arduino-663756
 
 # Set up Serial to communicate with Feather
 s = SerialSim(port="COM4", baudrate=115200, timeout=0.1)  # change when we actually start talking with Feather
-all_samples = {}  # {"sensor": [{"time": #, "altitude": #, "value": #}, {"time": #, "altitude": #, "value": #}], "sensor": ...}
+all_samples = {}  # {"sensor": [{"interptime": #, "time": #, "altitude": #, "value": #}, {"interptime": #, "time": #, "altitude": #, "value": #}], "sensor": ...}
+recent_packets = []
 latest_packet_num = 0
 initialized = False
 
@@ -25,6 +27,11 @@ app = Flask(__name__)
 socketio = SocketIO(app, async_mode=async_mode)
 thread = None
 thread_lock = Lock()
+
+# Set up logging
+log_filename = os.path.join("logs", f"log_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json")
+packets_since_log = 0
+max_packets_since_log = 10
 
 
 def determine_packet_type(packet):
@@ -41,7 +48,7 @@ def unpack_data_packet(pck):
     # This is assuming that the first two values of the extended preamble (packet number and type)
     # have already been extracted and removed
     # Output: dictionary of data from a TX, structured like
-    # {time: #, altitude: #, sensors: {"": #, "": #}}
+    # {interptime: #, time: #, altitude: #, sensors: {"": #, "": #}}
     data = []
     idx = 0
     samples_format = 'B'
@@ -49,6 +56,7 @@ def unpack_data_packet(pck):
     idx += 1
     for sample_idx in range(num_samples):
         data.append({})
+        data[sample_idx]['interptime'] = time_ns() # time packet was interpreted; probably similar to time it was broadcast
         data[sample_idx]['time'], data[sample_idx]['altitude'], num_sensors = struct.unpack('>HBB', pck[idx:idx+(2+1+1)])
         data[sample_idx]['time'] /= 4
         data[sample_idx]['altitude'] /= 2
@@ -110,14 +118,15 @@ def packet_data_to_all_samples(data_from_packet):
         for sensor in data_from_packet[sample_idx]['sensors'].keys():
             if sensor not in all_samples.keys():
                 all_samples[sensor] = []
-            all_samples[sensor].append({"time": data_from_packet[sample_idx]["time"],
+            all_samples[sensor].append({"interptime": data_from_packet[sample_idx]["interptime"],
+                                        "time": data_from_packet[sample_idx]["time"],
                                         "altitude": data_from_packet[sample_idx]["altitude"],
                                         "value": data_from_packet[sample_idx]["sensors"][sensor]})
 
 
 def interpret_packet(packet):
     # Determine the packet's type and do with it what must be done
-    # If it's a data packet, add it to all_samples and send it to the client
+    # If it's a data packet, add it to recent_packets and send it to the client
     # If it's a message packet, send it to the client's message box
     # If it's an error packet, send it to the client's message box
     # If it's a sync packet, ignore it
@@ -130,26 +139,41 @@ def interpret_packet(packet):
             data_from_packet = unpack_data_packet(packet_content)
             # Send data to client
             socketio.emit("data", data_from_packet)
-            # Save data to all_samples for logging
-            packet_data_to_all_samples(data_from_packet)
+            # Save data to all_samples
+            # packet_data_to_all_samples(data_from_packet)
+            # Put packet in recent_packets for logging
+            recent_packets.append({"type": "D", "data": data_from_packet})
         case "M":
             packet_message = unpack_message_packet(packet_content)
             socketio.emit("message", packet_message)
+            recent_packets.append({"type": "M", "value": packet_message})
             print(packet_message)
         case "E":
             packet_error = unpack_error_packet(packet_content)
             socketio.emit("error", packet_error)
+            recent_packets.append({"type": "E", "value": packet_error})
             print(packet_error)
         case "A":
             ack_packet_num = unpack_ack_packet(packet_content)
+            recent_packets.append({"type": "A", "packet": ack_packet_num})
             print(ack_packet_num)
         case "S":
             packet_time = unpack_sync_packet(packet_content)
+            recent_packets.append({"type": "S", "time": packet_time})
             print(packet_time)
+
+
+def write_recent_packets_to_log():
+    # Write all the samples in recent_packets to the log file and clear recent_packets
+    global recent_packets
+    with open(log_filename, 'a') as log_file:
+        log_file.writelines([json.dumps(p, sort_keys=True) + "\n" for p in recent_packets])
+    recent_packets = []
 
 
 def background_thread():
     # Constant updates to client
+    global packets_since_log, max_packets_since_log
     while True:
         socketio.sleep(0.25)
         if initialized:
@@ -159,6 +183,10 @@ def background_thread():
                 # There is data waiting to be read
                 packet = s.read(size=num_bytes)
                 interpret_packet(packet)
+                packets_since_log += 1
+                if packets_since_log >= max_packets_since_log:
+                    write_recent_packets_to_log()
+                    packets_since_log = 0
             # using socketio.emit() is good when the server is originating an exchange
 
 
