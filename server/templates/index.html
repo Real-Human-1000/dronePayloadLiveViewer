@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Live Viewer</title>
+    <style>
+        @font-face {
+			font-family: SourceCodePro;
+			font-weight: normal;
+			src: url("{{ url_for('static', filename='fonts/SourceCodePro-Regular.otf')}}") format("opentype");
+		}
+        @font-face {
+		    font-family: SourceCodePro;
+		    font-weight: bold;
+		    src: url("{{ url_for('static', filename='fonts/SourceCodePro-Bold.otf')}}") format("opentype");
+		}
+
+		html                    {box-sizing: border-box;}
+        *, *:before, *:after    {box-sizing: inherit;}
+        body                    {background-color: #252855; color: #EAEAEA; font-family: SourceCodePro, sans-serif;}
+
+		div.right-bar           {height: 100%; width: 40%; position: fixed; top: 15px; right: 15px; overflow-x: hidden;}
+		div.left-bar            {height: 100%; width: 60%; position: fixed; top: 15px; left: 15px; overflow-x: hidden;}
+        div#chart-div           {background-color: #385648; width: 100%; height: 95%; border: 2px solid #EAEAEA; border-radius: 6px;}
+
+        h1                      {font-weight: bold;}
+        h2                      {font-weight: normal;}
+        p                       {font-weight: normal;}
+
+        table                   {width: 90%}
+        table.invisible-table   {}
+        table.visible-table     {background-color: #385648; border: 2px solid #EAEAEA; font-weight: normal; border-radius: 6px; border-spacing: 2px; table-layout: fixed;}
+        tr                      {border: inherit; border-radius: inherit;}
+        thead                   {border: inherit; border-radius: inherit;}
+        th                      {border: inherit; border-radius: inherit; padding: 6px; font-weight: bold;}
+        td                      {border: inherit; border-radius: inherit; padding: 6px; text-align: center;}
+
+        button                  {border: 4px solid #EAEAEA; border-radius: 6px; color: #EAEAEA; font-family: SourceCodePro, sans-serif; cursor: pointer;}
+        button:hover            {filter: brightness(115%);}
+        button:active           {filter: brightness(85%);}
+        button:disabled         {filter: brightness(85%);}
+        button#init-button      {background-color: #385648;}
+        button#reset-button     {background-color: #A6262E;}
+
+        input[type=number]      {width: 60px;}
+
+        textarea                {background-color: #385648; font-family: SourceCodePro, sans-serif; color: #EAEAEA; width: 90%; height: 40%; border: 2px solid #EAEAEA; border-radius: 6px;}
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.0.4/socket.io.js" integrity="sha512-aMGMvNYu8Ue4G+fHa359jcPb1u+ytAF+P2SCb+PxrjCdO3n3ZTxJ30zuH39rimUggmTwmh2u7wvQsDTHESnmfQ==" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script type="text/javascript" charset="utf-8">
+        String.prototype.hashCode = function() {
+          var hash = 0,
+            i, chr;
+          if (this.length === 0) return hash;
+          for (i = 0; i < this.length; i++) {
+            chr = this.charCodeAt(i);
+            hash = ((hash << 5) - hash) + chr;
+            hash |= 0; // Convert to 32bit integer
+          }
+          return hash;
+        }
+
+        function hslToHex(h, s, l) {
+            // Convert hsl to hex
+            // Taken from https://stackoverflow.com/questions/36721830/convert-hsl-to-rgb-and-hex
+            l /= 100;
+            const a = s * Math.min(l, 1 - l) / 100;
+            const f = n => {
+                const k = (n + h / 30) % 12;
+                const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+                return Math.round(255 * color).toString(16).padStart(2, '0');   // convert to Hex and prefix "0" if needed
+            };
+            return `#${f(0)}${f(8)}${f(4)}`;
+        }
+
+        function name_to_color(name) {
+            // Convert a string (representing the name of a sensor; any length) into a consistent color
+            // Relies on a hashing script from https://stackoverflow.com/questions/7616461/generate-a-hash-from-string-in-javascript
+            return hslToHex(360 * (name.hashCode() % 100) / 100, 100, 50);
+        }
+
+        window.addEventListener("load", function(event) {
+            // Rolling records for each sensor type
+            // Whenever a new sensor is encountered, it will be added dynamically
+            // Record will eventually look like:
+            // {"sensor": [{"time": #, "altitude": #, "value": #}, {}, {}], "sensor": []}
+            var sample_record = {};
+            var record_length = 10;  // seconds (actual number of samples in record will change dynamically)
+            var latest_time = 0;
+			var latest_altitude = 0;
+			var average_length = 3;  // seconds (actual number of samples in average will vary)
+
+			var data_table_body = document.getElementById("data-table-body");
+
+			var record_length_number = document.getElementById("record-number");
+			record_length_number.value = record_length;
+			var average_length_number = document.getElementById("average-number");
+			average_length_number.value = average_length;
+			
+			// Chart
+			// We need this object later, so we will create it here
+			//Chart.defaults.backgroundColor = '#9BD0F5';
+            //Chart.defaults.borderColor = '#EAEAEA';
+            Chart.defaults.color = '#EAEAEA';
+            Chart.defaults.font.family = "SourceCodePro";
+            Chart.defaults.font.size = 14;
+            var ctx = document.getElementById("chart");
+            var chart = new Chart(ctx, {
+                type: "scatter",
+                data: {},
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    showLine: true,
+                    scales: {
+                        "readings": {
+                            type: "linear",
+                            position: "bottom",
+                            beginAtZero: true,
+                            title: {
+                                text: "Sensor Readings",
+                                display: true
+                            }
+                        },
+                        "altitude": {
+                            type: "linear",
+                            position: "left",
+                            beginAtZero: true,
+                            max: 125,
+                            title: {
+                                text: "Altitude",
+                                display: true
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Sensor Record',
+                        },
+                        legend: {
+                            labels: {
+                                filter: function(item) {
+                                    return !item.text.includes("smoothed-");
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Connect to the Socket.IO server
+            // The connection URL has the following format, relative to the current page:
+            //  http[s]://<domain>:<port>[/<namespace>]
+            var socket = io();
+
+            // Event handler for new connections
+            // The callback function is invoked when a connection with the server is established
+            socket.on('connect', function() {
+                console.log("Connected!");
+                socket.emit('connect_ack');
+            });
+
+            // Event handler for server sent data
+            // The callback function is invoked whenever the server emits data
+            // to the client. The data is then displayed in the "Received" section of the page
+			// TODO: This update-remove-update sequence could be greatly simplified
+			// Ex, it might be possible to pass sample_record directly to the chart to save on the iteration
+            socket.on('data', function(data_from_packet) {
+                console.log("Got some data:");
+                for (let samp = 0; samp < data_from_packet.length; samp++) {
+                    for (const [sensor, value] of Object.entries(data_from_packet[samp].sensors)) {
+						// If this is a new sensor, add it to the record and to the table
+                        if (!(sensor in sample_record)) {
+                            sample_record[sensor] = [];
+                            sample_record["smoothed-" + sensor] = [];
+							// Create a new row in the table
+							let sensor_row = document.createElement("tr");
+							sensor_row.id = "row-" + sensor;
+							// Create a cell for each column
+							let sensor_cell = document.createElement("td");
+							sensor_cell.id = "sensor-cell-" + sensor;
+							sensor_cell.innerText = sensor;  // This doesn't change so we can set this one
+							sensor_cell.style = "color:" + name_to_color(sensor);
+							sensor_row.appendChild(sensor_cell);
+							let recent_cell = document.createElement("td");
+							recent_cell.id = "recent-cell-" + sensor; 
+							sensor_row.appendChild(recent_cell);
+							let recent_avg_cell = document.createElement("td");
+							recent_avg_cell.id = "recent-avg-cell-" + sensor;
+							sensor_row.appendChild(recent_avg_cell);
+							let alt_max_cell = document.createElement("td");
+							alt_max_cell.id = "alt-max-cell-" + sensor;
+							sensor_row.appendChild(alt_max_cell);
+							let alt_avg_max_cell = document.createElement("td");
+							alt_avg_max_cell.id = "alt-avg-max-cell-" + sensor;
+							sensor_row.appendChild(alt_avg_max_cell);
+							data_table_body.appendChild(sensor_row);
+                        }
+						// Add sample to sample record
+                        sample_record[sensor].push({"time": data_from_packet[samp]["time"],
+                                                    "altitude": data_from_packet[samp]["altitude"],
+                                                    "value": data_from_packet[samp]["sensors"][sensor]});
+						// Update table
+						document.getElementById("recent-cell-" + sensor).innerText = data_from_packet[samp]["sensors"][sensor];
+						// Get average sensor value
+						let sum_val = 0;
+						let sum_alt = 0;
+						let sum_count = 0;
+						let max_val = 0;
+						let alt_at_max = 0;
+						for (let rsamp = 0; rsamp < sample_record[sensor].length; rsamp++) {
+							if (latest_time - sample_record[sensor][rsamp]["time"] < average_length) {
+								sum_val = sum_val + sample_record[sensor][rsamp]["value"];
+								sum_alt = sum_alt + sample_record[sensor][rsamp]["altitude"];
+								sum_count ++;
+							}
+							if (sample_record[sensor][rsamp]["value"] > max_val) {
+								max_val = sample_record[sensor][rsamp]["value"];
+								alt_at_max = sample_record[sensor][rsamp]["altitude"];
+							}
+						}
+						document.getElementById("recent-avg-cell-" + sensor).innerText = Math.floor(10 * sum_val / sum_count) / 10;
+						document.getElementById("alt-max-cell-" + sensor).innerText = Math.floor(10 * alt_at_max) / 10;
+						sample_record["smoothed-" + sensor].push({"time": data_from_packet[samp]["time"],
+                                                    "altitude": sum_alt / sum_count,
+                                                    "value": sum_val / sum_count});
+                        let alt_at_avg_max = 0;
+                        let max_avg_val = 0;
+						for (let rsamp = 0; rsamp < sample_record["smoothed-" + sensor].length; rsamp++) {
+						    if (sample_record["smoothed-" + sensor][rsamp]["value"] > max_avg_val) {
+						        max_avg_val = sample_record["smoothed-" + sensor][rsamp]["value"];
+						        alt_at_avg_max = sample_record["smoothed-" + sensor][rsamp]["altitude"];
+						    }
+						}
+						document.getElementById("alt-avg-max-cell-" + sensor).innerText = Math.floor(10 * alt_at_avg_max) / 10;
+                    }
+					// Update latest global metrics if this is the most recent packet
+					if (data_from_packet[samp]["time"] > latest_time) {
+						latest_time = data_from_packet[samp]["time"];
+						latest_altitude = data_from_packet[samp]["altitude"];
+						document.getElementById("altitude-m").innerText = Math.floor(latest_altitude * 100) / 100;
+						document.getElementById("altitude-ft").innerText = Math.floor(latest_altitude * 3.281 * 10) / 10;
+                    }
+                }
+                // Remove old data from the rolling record and update the table
+                for (const samples of Object.values(sample_record)) {
+                    for (let samp = 0; samp < samples.length; samp++) {
+                        if (samples[samp]["time"] < latest_time - record_length) {
+                            // This sample is too old
+                            samples.splice(samp, 1);
+                        }
+                    }
+                }
+                // Update chart with the new data
+				let new_data = {"datasets": []};
+				for (const [sensor, samples] of Object.entries(sample_record)) {
+					let new_dataset = {"label": sensor, "data": [], showLine: false, yAxisID: 'altitude', xAxisID: 'readings', borderColor: name_to_color(sensor)};
+					if (sensor.includes("smoothed-")) {
+					    new_dataset.showLine = true;
+					    new_dataset.borderColor = name_to_color(sensor.slice(9));
+					    new_dataset.pointRadius = 0;
+				    }
+					for (let samp = 0; samp < sample_record[sensor].length; samp++) {
+						new_dataset["data"].push({"x": sample_record[sensor][samp]["value"], "y": sample_record[sensor][samp]["altitude"]});
+					}
+					new_data.datasets.push(new_dataset);
+				}
+				chart.data = new_data;
+				chart.update('none');
+            });
+
+            // Event handler for server sent messages
+			// We just drop these in the message box
+            socket.on('message', function(msg) {
+                console.log("Got a message:");
+                console.log(msg);
+                let message_box = document.getElementById("message-box");
+                message_box.value += msg + "\n";
+                message_box.scrollTop = message_box.scrollHeight;
+            });
+
+            // Event handler for server sent errors
+            // For now, this is the same as messages
+            socket.on('error', function(err) {
+                console.log("Got an error:");
+                console.log(err);
+                error_box = document.getElementById("message-box");
+                error_box.value += err + "\n";
+                error_box.scrollTop = error_box.scrollHeight;
+            });
+
+            // Handlers for the buttons
+            // Initialize button
+            document.getElementById('init-button').onclick = function(event) {
+                socket.emit('initialize');
+                console.log("Init!");
+                document.getElementById('init-button').disabled = true;
+                return false;
+            };
+            // Reset button
+			// Clears table and chart and resets record
+            document.getElementById('reset-button').onclick = function(event) {
+                console.log("Reset!");
+				// Clear record
+				sample_record = {};
+				record_length = 10;  // seconds (actual number of samples in record will change dynamically)
+				latest_time = 0;
+				latest_altitude = 0;
+				// Clear chart
+				chart.data = {};
+				chart.update('none');
+				// Clear table body
+				while (data_table_body.firstChild) {
+					data_table_body.removeChild(data_table_body.lastChild);
+				}
+                return false;
+            };
+
+            // Handlers for the number inputs
+            record_length_number.oninput = function() {
+                record_length = record_length_number.value;
+            }
+
+            average_length_number.oninput = function() {
+                average_length = average_length_number.value;
+            }
+        });
+    </script>
+</head>
+<body>
+    <div class="left-bar">
+        <table class="visible-table">
+            <tr>
+                <th>
+                    <h1>Sensor Suite Live Viewer</h1>
+                </th>
+            </tr>
+        </table>
+        <h2>Current altitude: <span id="altitude-m">0</span>m (<span id="altitude-ft">0</span>ft)</h2>
+        <table class="invisible-table">
+            <tr>
+                <td>
+                    <button type="button" id="init-button">Initialize</button>
+                </td>
+                <td>
+                    <button type="button" id="reset-button">Reset</button>
+                </td>
+                <td>
+                    Record: <input type="number" id="record-number"> (seconds)
+                </td>
+                <td>
+                    Average: <input type="number" id="average-number"> (seconds)
+                </td>
+            </tr>
+        </table>
+        <br>
+        <table id="data-table" class="visible-table">
+            <thead id="data-table-head">
+                <tr id="header-row">
+                    <th>Sensor</th>
+                    <th>Most Recent</th>
+                    <th>Rolling Average</th>
+                    <th>Altitude at Actual Max</th>
+                    <th>Altitude at Smoothed Max</th>
+                </tr>
+            </thead>
+            <tbody id="data-table-body">
+            </tbody>
+        </table>
+        <br>
+        <textarea id="message-box" readonly></textarea>
+    </div>
+    <div class="right-bar">
+        <div id="chart-div">
+            <canvas id="chart" width="400" height="400"></canvas>
+        </div>
+    </div>
+</body>
+</html>
