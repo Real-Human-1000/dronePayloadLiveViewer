@@ -3,10 +3,11 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_Sensor.h>
+#include <RH_RF95.h>
 
 // BMP388 things
 #include "Adafruit_BMP3XX.h"
-#define SEALEVELPRESSURE_HPA (975.40)
+float SEALEVELPRESSURE_HPA = 101388.48 / 100;
 Adafruit_BMP3XX bmp;
 
 // ENS160 things
@@ -24,7 +25,15 @@ Adafruit_PM25AQI pm = Adafruit_PM25AQI();
 // Battery
 #define VBATPIN A9
 
-const word packet_period = 750;  // millis
+// Feather 32u4 wired to RFM95 breakout:
+#define RFM95_CS   5
+#define RFM95_RST  12
+#define RFM95_INT  0
+
+// Change to 434.0 or other frequency, must match RX's freq!
+#define RF95_FREQ 434.0
+
+const word packet_period = 5000;  // millis
 const word ens160_period = 1000; 
 const word scd30_period = 2500;
 const word pm_period = 5000;
@@ -56,10 +65,24 @@ word recent_pm_particles_10um;
 word recent_pm_particles_25um;
 word recent_pm_particles_50um;
 
-byte recent_battery_voltage;  // multiply actual value (3-5) by 51 & truncate or round
+word recent_battery_voltage;  // multiply actual value (3-5) by 13107 & truncate (--> new range is up to about 65535)
+
+// Singleton instance of the radio driver
+RH_RF95 rf95(RFM95_CS, RFM95_INT);
 
 
 void setup() {
+  // Setup pins for radio control
+  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(RFM95_RST, OUTPUT);
+  digitalWrite(RFM95_RST, HIGH);
+
+  // manually reset radio
+  digitalWrite(RFM95_RST, LOW);
+  delay(10);
+  digitalWrite(RFM95_RST, HIGH);
+  delay(10);
+
   // Remove the Serial code when not testing
   Serial.begin(115200);
   while (!Serial);
@@ -81,6 +104,9 @@ void setup() {
   bmp.setPressureOversampling(BMP3_OVERSAMPLING_8X);
   bmp.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_3);
   bmp.setOutputDataRate(BMP3_ODR_50_HZ);
+
+  //SEALEVELPRESSURE_HPA = bmp.readPressure() / 100 - 3;
+
 
   // ENS160
   Serial.print("ENS160... ");
@@ -116,6 +142,29 @@ void setup() {
     while (1) delay(10);
   }
   Serial.println("PM found!");
+
+  // RFM95 Radio
+  while (!rf95.init()) {
+    Serial.println("LoRa radio init failed");
+    Serial.println("Uncomment '#define SERIAL_DEBUG' in RH_RF95.cpp for detailed debug info");
+    while (1);
+  }
+  Serial.println("LoRa radio init OK!");
+
+  // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
+  if (!rf95.setFrequency(RF95_FREQ)) {
+    Serial.println("setFrequency failed");
+    while (1);
+  }
+  Serial.print("Set Freq to: "); Serial.println(RF95_FREQ);
+
+  // Defaults after init are 434.0MHz, 13dBm, Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on
+  rf95.setSpreadingFactor(12);
+
+  // The default transmitter power is 13dBm, using PA_BOOST.
+  // If you are using RFM95/96/97/98 modules which uses the PA_BOOST transmitter pin, then
+  // you can set transmitter powers from 5 to 23 dBm:
+  rf95.setTxPower(10, false);
 }
 
 void loop() {
@@ -177,89 +226,199 @@ void loop() {
     measuredvbat *= 2;    // we divided by 2, so multiply back
     measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
     measuredvbat /= 1024; // convert to voltage
-    recent_battery_voltage = (byte) round(50 * measuredvbat);
+    recent_battery_voltage = (word) floor(13107 * measuredvbat);
     last_battery = battery_period;
   }
 
   // Time to send a packet
   if (loop_millis - last_packet > packet_period) {
     // The server can accept packets with multiple samples, but it's actually a lot more difficult to do that, so I won't
+    // Also, because I am lazy, this packet is actually much more static than the server version
+    digitalWrite(LED_BUILTIN, HIGH); 
 
-    // Packet number
+    byte length_of_packet = (2 + 1 + 1) + (2 + 1 + 1) + ((1 + 3) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 3)) + (2 * 9);
+    byte packet [length_of_packet] = {};
+    byte pindex = 0;
 
-    // Packet type = "D"
+    // Packet number (2b)
+    memcpy(&packet[pindex], &packet_num, 2);
+    pindex = pindex + 2;
 
-    // Number of samples (1)
+    // Packet type = "D" (1b)
+    char packet_type = 'D';
+    memcpy(&packet[pindex], &packet_type, 1);
+    pindex = pindex + 1;
+
+    // Number of samples (1b)
+    byte num_samples = 1;
+    memcpy(&packet[pindex], &num_samples, 1);
+    pindex = pindex + 1;
 
     // Sample 1
-    // Time (quarter-seconds, 2 bytes)
+    // Time (quarter-seconds, 2b)
     word sample_time = loop_millis * 4 / 1000;
+    memcpy(&packet[pindex], &sample_time, 2);
+    pindex = pindex + 2;
 
     // Altitude (half-meters from the ground, 1 byte)
-    recent_bmp388_altitude
+    memcpy(&packet[pindex], &recent_bmp388_altitude, 1);
+    pindex = pindex + 1;
 
     // Number of sensors (variable value, 1 byte)
-    8
+    byte num_sensors = 9;
+    memcpy(&packet[pindex], &num_sensors, 1);
+    pindex = pindex + 1;
 
     // Number of characters in name of sensor 1 = 3
-    3
+    byte numchar_sens1 = 3;
+    memcpy(&packet[pindex], &numchar_sens1, 1); 
+    pindex = pindex + 1;
 
     // Name of sensor 1 = "CO2"
-    "CO2"
+    char name_sens1[3] = {'C', 'O', '2'};
+    memcpy(&packet[pindex], &name_sens1, numchar_sens1);
+    pindex = pindex + numchar_sens1;
 
-    // Number of characters in name of sensor 2 = 4
-    4
+    // // Number of characters in name of sensor 2 = 4
+    byte numchar_sens2 = 4;
+    memcpy(&packet[pindex], &numchar_sens2, 1);
+    pindex = pindex + 1;
 
-    // Name of sensor 2 = "TVOC"
-    "TVOC"
+    // // Name of sensor 2 = "TVOC"
+    char name_sens2[4] = {'T', 'V', 'O', 'C'};
+    memcpy(&packet[pindex], &name_sens2, numchar_sens2);
+    pindex = pindex + numchar_sens2;
 
     // Number of characters in name of sensor 3 = 4
-    4
+    byte numchar_sens3 = 4;
+    memcpy(&packet[pindex], &numchar_sens3, 1);
+    pindex = pindex + 1;
 
     // Name of sensor 3 = "eCO2"
-    "eCO2"
+    char name_sens3[4] = {'e', 'C', 'O', '2'};
+    memcpy(&packet[pindex], &name_sens3, numchar_sens3);
+    pindex = pindex + numchar_sens3;
 
     // Number of characters in name of sensor 4 = 4
-    4
+    byte numchar_sens4 = 4;
+    memcpy(&packet[pindex], &numchar_sens4, 1);
+    pindex = pindex + 1;
 
     // Name of sensor 4 = "PM03"
-    "PM03"
+    char name_sens4[4] = {'P', 'M', '0', '3'};
+    memcpy(&packet[pindex], &name_sens4, numchar_sens4);
+    pindex = pindex + numchar_sens4;
 
     // Number of characters in name of sensor 5 = 4
-    4
+    byte numchar_sens5 = 4;
+    memcpy(&packet[pindex], &numchar_sens5, 1);
+    pindex = pindex + 1;
 
     // Name of sensor 5 = "PM05"
-    "PM05"
+    char name_sens5[4] = {'P', 'M', '0', '5'};
+    memcpy(&packet[pindex], &name_sens5, numchar_sens5);
+    pindex = pindex + numchar_sens5;
 
     // Number of characters in name of sensor 6 = 4
+    byte numchar_sens6 = 4;
+    memcpy(&packet[pindex], &numchar_sens6, 1);
+    pindex = pindex + 1;
 
     // Name of sensor 6 = "PM10"
+    char name_sens6[4] = {'P', 'M', '1', '0'};
+    memcpy(&packet[pindex], &name_sens6, numchar_sens6);
+    pindex = pindex + numchar_sens6;
 
     // Number of characters in name of sensor 7 = 4
+    byte numchar_sens7 = 4;
+    memcpy(&packet[pindex], &numchar_sens7, 1);
+    pindex = pindex + 1;
 
     // Name of sensor 7 = "PM25"
+    char name_sens7[4] = {'P', 'M', '2', '5'};
+    memcpy(&packet[pindex], &name_sens7, numchar_sens7);
+    pindex = pindex + numchar_sens7;
 
     // Number of characters in name of sensor 8 = 4
+    byte numchar_sens8 = 4;
+    memcpy(&packet[pindex], &numchar_sens8, 1);
+    pindex = pindex + 1;
 
     // Name of sensor 8 = "PM50"
+    char name_sens8[4] = {'P', 'M', '5', '0'};
+    memcpy(&packet[pindex], &name_sens8, numchar_sens8);
+    pindex = pindex + numchar_sens8;
+
+    // Number of characters in name of sensor 9 = 3
+    byte numchar_sens9 = 3;
+    memcpy(&packet[pindex], &numchar_sens9, 1);
+    pindex = pindex + 1;
+
+    // Name of sensor 9 = "BAT"
+    char name_sens9[3] = {'B', 'A', 'T'};
+    memcpy(&packet[pindex], &name_sens9, numchar_sens9);
+    pindex = pindex + 3;
 
     // Value of sensor 1
+    //recent_scd30_co2
+    memcpy(&packet[pindex], &recent_scd30_co2, 2);
+    pindex = pindex + 2;
 
     // Value of sensor 2
+    //recent_ens160_tvoc
+    memcpy(&packet[pindex], &recent_ens160_tvoc, 2);
+    pindex = pindex + 2;
 
     // Value of sensor 3
+    //recent_ens160_eco2
+    memcpy(&packet[pindex], &recent_ens160_eco2, 2);
+    pindex = pindex + 2;
 
     // Value of sensor 4
+    //recent_pm_particles_03um
+    memcpy(&packet[pindex], &recent_pm_particles_03um, 2);
+    pindex = pindex + 2;
 
     // Value of sensor 5
+    //recent_pm_particles_05um
+    memcpy(&packet[pindex], &recent_pm_particles_05um, 2);
+    pindex = pindex + 2;
 
     // Value of sensor 6
+    //recent_pm_particles_10um
+    memcpy(&packet[pindex], &recent_pm_particles_10um, 2);
+    pindex = pindex + 2;
 
     // Value of sensor 7
+    //recent_pm_particles_25um
+    memcpy(&packet[pindex], &recent_pm_particles_25um, 2);
+    pindex = pindex + 2;
 
     // Value of sensor 8
-    
+    //recent_pm_particles_50um
+    memcpy(&packet[pindex], &recent_pm_particles_50um, 2);
+    pindex = pindex + 2;
 
+    // Value of sensor 9
+    //recent_battery_voltage
+    memcpy(&packet[pindex], &recent_battery_voltage, 2);
+    pindex = pindex + 2;
+
+    // digitalWrite(LED_BUILTIN, HIGH); 
+    // Serial.println("Packet:");
+    // for (int e = 0; e < length_of_packet; e++) {
+    //   for (int d = 0; d < 8 * sizeof(packet[e]); d++) {
+    //     Serial.print(bitRead(packet[e], d));
+    //   }
+    // }
+    // Serial.println();
+    // digitalWrite(LED_BUILTIN, LOW);
+
+    // Send packet over radio
+    rf95.send((uint8_t *)packet, length_of_packet);
+    
+    digitalWrite(LED_BUILTIN, LOW);
+    packet_num ++;
     last_packet = loop_millis;
   }
 }

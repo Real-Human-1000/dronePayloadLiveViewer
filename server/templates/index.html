@@ -88,6 +88,7 @@
             var sample_record = {};
             var record_length = 10;  // seconds (actual number of samples in record will change dynamically)
             var latest_time = 0;
+            var latest_actual_time = Date.now();
 			var latest_altitude = 0;
 			var average_length = 3;  // seconds (actual number of samples in average will vary)
 
@@ -242,6 +243,8 @@
 						latest_altitude = data_from_packet[samp]["altitude"];
 						document.getElementById("altitude-m").innerText = Math.floor(latest_altitude * 100) / 100;
 						document.getElementById("altitude-ft").innerText = Math.floor(latest_altitude * 3.281 * 10) / 10;
+						document.getElementById("age").innerText = 0;
+						latest_actual_time = Date.now();
                     }
                 }
                 // Remove old data from the rolling record and update the table
@@ -326,6 +329,11 @@
             average_length_number.oninput = function() {
                 average_length = average_length_number.value;
             }
+
+            setInterval(function() {
+                // Code to be executed repeatedly
+                document.getElementById("age").innerText = (Date.now() - latest_actual_time)/1000;
+            }, 1000); // Updates every 1000 milliseconds (1 second)
         });
     </script>
 </head>
@@ -338,7 +346,16 @@
                 </th>
             </tr>
         </table>
-        <h2>Current altitude: <span id="altitude-m">0</span>m (<span id="altitude-ft">0</span>ft)</h2>
+        <table class="invisible-table">
+            <tr>
+                <td style="text-align: left;">
+                    <h2>Current altitude: <span id="altitude-m">0</span>m (<span id="altitude-ft">0</span>ft)</h2>
+                </td>
+                <td style="text-align: right;">
+                    <h2>Age: <span id="age">-1</span></h2>
+                </td>
+            </tr>
+        </table>
         <table class="invisible-table">
             <tr>
                 <td>

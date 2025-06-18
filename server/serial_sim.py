@@ -48,12 +48,16 @@ class SerialSim:
             sample.append(s.encode('ascii'))
         for s in sensors_to_include:
             sample.append(int(self.data[s]))
-        packet = struct.pack('>' + complete_format, self.latest_packet, b'D', 1, *sample)
+        packet = struct.pack('<' + complete_format, self.latest_packet, b'D', 1, *sample)
         # print(packet)
         # print("True:")
-        # print(struct.unpack('>' + complete_format, packet))
+        # print(struct.unpack('<' + complete_format, packet))
         # print("Generated a packet of length " + str(len(packet)))
+        packet = self.string_to_bytes("100100111100000000100010100000000011110110111010011001011001000011000000110000101111001001001100001000000010101001101010111100101100001000100000101001101100001011110010010011000010000000001010101100100000110011001100001000000000101010110010000011001010110000100000000010101011001010001100000011000010000000001010101100100100110010101100001000000000101010110010101011000000110011000000010000101000001000101010110100110100000011100010000000000100111110000000010001010000000000110100000000000010000000000000000000000000000000000000000000000011001100011101")
         return packet
+
+    def string_to_bytes(self, s):
+        return b''.join([int(s[i*8 : i*8+8][::-1], 2).to_bytes(1, byteorder='big') for i in range(len(s)//8)])
 
     def generate_message_packet(self):
         # Create a message packet
@@ -124,11 +128,12 @@ class SerialSim:
         # "Writing to the Serial connection"
         self.output_buffer = data
 
+    @property
     def in_waiting(self):
         # Get number of bytes in the input buffer
-        if len(self.input_buffer) == 0 and random.random() < 0.8:
+        if random.random() < 0.25:
             # Artificially generate some packets, sometimes
-            self.input_buffer = self.generate_random_average_packet()
+            self.input_buffer += self.generate_random_average_packet()
         return len(self.input_buffer)
 
     def out_waiting(self):

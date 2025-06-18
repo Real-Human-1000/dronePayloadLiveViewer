@@ -15,11 +15,12 @@ import os
 # And https://projecthub.arduino.cc/ansh2919/serial-communication-between-python-and-arduino-663756
 
 # Set up Serial to communicate with Feather
-s = SerialSim(port="COM4", baudrate=115200, timeout=0.1)  # change when we actually start talking with Feather
+s = Serial(port="COM6", baudrate=115200, timeout=0.5)  # change when we actually start talking with Feather
 all_samples = {}  # {"sensor": [{"interptime": #, "time": #, "altitude": #, "value": #}, {"interptime": #, "time": #, "altitude": #, "value": #}], "sensor": ...}
 recent_packets = []
 latest_packet_num = 0
 initialized = False
+endianness = '<'
 
 # Set up Flask web app
 async_mode = None
@@ -34,11 +35,15 @@ packets_since_log = 0
 max_packets_since_log = 10
 
 
+def string_to_bytes(s):
+    return b''.join([int(s[i * 8: i * 8 + 8][::-1], 2).to_bytes(1, byteorder='big') for i in range(len(s) // 8)])
+
+
 def determine_packet_type(packet):
     # Determine whether a packet is a data packet, message packet, error packet, sync packet, ack packet, etc.
     # First two bytes are the packet number, third is the packet type
     # Output: packet number, packet type (D, E, A, S, or M)
-    packet_num, packet_type = struct.unpack('>Hc', packet[:3])
+    packet_num, packet_type = struct.unpack(endianness + 'Hc', packet[:3])
     packet_type = packet_type.decode('ascii')
     return packet_num, packet_type, packet[3:]
 
@@ -52,29 +57,35 @@ def unpack_data_packet(pck):
     data = []
     idx = 0
     samples_format = 'B'
-    num_samples = struct.unpack('>' + samples_format, pck[idx:idx+1])[0]
+    num_samples = struct.unpack(endianness + samples_format, pck[idx:idx+1])[0]
     idx += 1
     for sample_idx in range(num_samples):
         data.append({})
         data[sample_idx]['interptime'] = time_ns() # time packet was interpreted; probably similar to time it was broadcast
-        data[sample_idx]['time'], data[sample_idx]['altitude'], num_sensors = struct.unpack('>HBB', pck[idx:idx+(2+1+1)])
+        data[sample_idx]['time'], data[sample_idx]['altitude'], num_sensors = struct.unpack(endianness + 'HBB', pck[idx:idx+(2+1+1)])
         data[sample_idx]['time'] /= 4
         data[sample_idx]['altitude'] /= 2
         idx += 2+1+1
+        print(data[sample_idx])
         data[sample_idx]['sensors'] = {}
         ordered_sensors = []
         for sensor_idx in range(num_sensors):
             # Get the names of all sensors
-            sensor_name_length = struct.unpack('>B', pck[idx:idx+1])[0]
+            sensor_name_length = struct.unpack(endianness + 'B', pck[idx:idx+1])[0]
+            print(sensor_name_length)
             idx += 1
-            sensor_name = struct.unpack('>' + str(sensor_name_length) + 's', pck[idx:idx+sensor_name_length])[0].decode('ascii')
+            print(pck[idx:idx+sensor_name_length])
+            sensor_name = struct.unpack(endianness + str(sensor_name_length) + 's', pck[idx:idx+sensor_name_length])[0].decode('ascii')
             idx += sensor_name_length
             ordered_sensors.append(sensor_name)
         for sensor_idx in range(num_sensors):
             # Get the actual values of all sensors
-            sensor_val = struct.unpack('>H', pck[idx:idx+2])[0]
+            sensor_val = struct.unpack(endianness + 'H', pck[idx:idx+2])[0]
             idx += 2
             data[sample_idx]['sensors'][ordered_sensors[sensor_idx]] = sensor_val
+            if ordered_sensors[sensor_idx] == "BAT":
+                data[sample_idx]['sensors'][ordered_sensors[sensor_idx]] /= 13107  # convert battery voltage back to 3-5 range
+            print(sensor_val)
     return data
 
 
@@ -82,8 +93,8 @@ def unpack_message_packet(pck):
     # Read the message from a message packet, assuming that the packet's extended preamble (time, number, and type)
     # has already been read and extracted
     # Packet content is a ushort and a string
-    msg_length = struct.unpack('>B', bytes([pck[0]]))[0]
-    pck_message = struct.unpack(f'>{msg_length}s', pck[1:])[0].decode('ascii')
+    msg_length = struct.unpack(endianness + 'B', bytes([pck[0]]))[0]
+    pck_message = struct.unpack(endianness + f'{msg_length}s', pck[1:])[0].decode('ascii')
     return pck_message
 
 
@@ -99,7 +110,7 @@ def unpack_ack_packet(pck):
     # Read the packet number from an ack packet, assuming that the packet's extended preamble (time, number, and type)
     # has already been read and extracted
     # Packet content is just a uint
-    orig_pck_num = struct.unpack('>H', pck[:2])
+    orig_pck_num = struct.unpack(endianness + 'H', pck[:2])
     return orig_pck_num
 
 
@@ -107,13 +118,14 @@ def unpack_sync_packet(pck):
     # Read the time from a sync packet, assuming that the packet's extended preamble (time, number, and type)
     # has already been read and extracted
     # Packet content is just the time as a uint
-    pck_time = struct.unpack('>H', pck[:2])
+    pck_time = struct.unpack(endianness + 'H', pck[:2])
     return pck_time
 
 
 def packet_data_to_all_samples(data_from_packet):
     # Save a packet to all_samples
     # This may not actually be the best way to do continuous logging
+    # Currently (6/18/2025) unused
     for sample_idx in range(len(data_from_packet)):
         for sensor in data_from_packet[sample_idx]['sensors'].keys():
             if sensor not in all_samples.keys():
@@ -133,6 +145,7 @@ def interpret_packet(packet):
     # If it's an ack packet, ignore it
     global latest_packet_num
     packet_num, packet_type, packet_content = determine_packet_type(packet)
+    print(packet_num, packet_type, packet_content)
     latest_packet_num = max(latest_packet_num, packet_num)
     match packet_type:
         case "D":
@@ -178,10 +191,15 @@ def background_thread():
         socketio.sleep(0.25)
         if initialized:
             # Get latest data from s
-            num_bytes = s.in_waiting()
+            num_bytes = s.in_waiting
             if num_bytes > 0:
+                print(f"{num_bytes} bytes in waiting")
                 # There is data waiting to be read
                 packet = s.read(size=num_bytes)
+                s.reset_input_buffer()
+                print(f"Read {packet}")
+                # if b'\r\n' in packet:
+                #     packet = packet.split(b'\r\n')[0]  # If we accidentally miss a packet (or multiple pile up), several packets will be waiting for us; just grab the first one
                 interpret_packet(packet)
                 packets_since_log += 1
                 if packets_since_log >= max_packets_since_log:
@@ -213,8 +231,8 @@ def connect_ack():
 def initialize():
     global initialized
     print("Initialize!")
-    packet = struct.pack('>HcH', latest_packet_num, b'S', 0)
-    s.write(packet)
+    # packet = struct.pack(endianness + 'HcH', latest_packet_num, b'S', 0)
+    # s.write(packet)
     initialized = True
 
 
