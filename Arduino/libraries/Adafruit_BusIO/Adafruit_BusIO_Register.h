@@ -8,7 +8,7 @@
 
 #include <Adafruit_GenericDevice.h>
 #include <Adafruit_I2CDevice.h>
-#include <Adafruit_SPIDevice.h>
+//#include <Adafruit_SPIDevice.h>
 
 typedef enum _Adafruit_BusIO_SPIRegType {
   ADDRBIT8_HIGH_TOREAD = 0,
@@ -47,16 +47,16 @@ public:
                           uint8_t width = 1, uint8_t byteorder = LSBFIRST,
                           uint8_t address_width = 1);
 
-  Adafruit_BusIO_Register(Adafruit_SPIDevice *spidevice, uint16_t reg_addr,
-                          Adafruit_BusIO_SPIRegType type, uint8_t width = 1,
-                          uint8_t byteorder = LSBFIRST,
-                          uint8_t address_width = 1);
+//  Adafruit_BusIO_Register(Adafruit_SPIDevice *spidevice, uint16_t reg_addr,
+//                          Adafruit_BusIO_SPIRegType type, uint8_t width = 1,
+//                          uint8_t byteorder = LSBFIRST,
+//                          uint8_t address_width = 1);
 
-  Adafruit_BusIO_Register(Adafruit_I2CDevice *i2cdevice,
-                          Adafruit_SPIDevice *spidevice,
-                          Adafruit_BusIO_SPIRegType type, uint16_t reg_addr,
-                          uint8_t width = 1, uint8_t byteorder = LSBFIRST,
-                          uint8_t address_width = 1);
+//  Adafruit_BusIO_Register(Adafruit_I2CDevice *i2cdevice,
+//                          Adafruit_SPIDevice *spidevice,
+//                          Adafruit_BusIO_SPIRegType type, uint16_t reg_addr,
+//                          uint8_t width = 1, uint8_t byteorder = LSBFIRST,
+//                          uint8_t address_width = 1);
 
   Adafruit_BusIO_Register(Adafruit_GenericDevice *genericdevice,
                           uint16_t reg_addr, uint8_t width = 1,
@@ -82,7 +82,7 @@ public:
 
 private:
   Adafruit_I2CDevice *_i2cdevice;
-  Adafruit_SPIDevice *_spidevice;
+//  Adafruit_SPIDevice *_spidevice;
   Adafruit_GenericDevice *_genericdevice;
   Adafruit_BusIO_SPIRegType _spiregtype;
   uint16_t _address;

@@ -204,7 +204,7 @@
                                                     "altitude": data_from_packet[samp]["altitude"],
                                                     "value": data_from_packet[samp]["sensors"][sensor]});
 						// Update table
-						document.getElementById("recent-cell-" + sensor).innerText = data_from_packet[samp]["sensors"][sensor];
+						document.getElementById("recent-cell-" + sensor).innerText = Math.round(100 * data_from_packet[samp]["sensors"][sensor]) / 100;
 						// Get average sensor value
 						let sum_val = 0;
 						let sum_alt = 0;
@@ -222,8 +222,8 @@
 								alt_at_max = sample_record[sensor][rsamp]["altitude"];
 							}
 						}
-						document.getElementById("recent-avg-cell-" + sensor).innerText = Math.floor(10 * sum_val / sum_count) / 10;
-						document.getElementById("alt-max-cell-" + sensor).innerText = Math.floor(10 * alt_at_max) / 10;
+						document.getElementById("recent-avg-cell-" + sensor).innerText = Math.round(10 * sum_val / sum_count) / 10;
+						document.getElementById("alt-max-cell-" + sensor).innerText = Math.round(10 * alt_at_max) / 10;
 						sample_record["smoothed-" + sensor].push({"time": data_from_packet[samp]["time"],
                                                     "altitude": sum_alt / sum_count,
                                                     "value": sum_val / sum_count});
@@ -333,7 +333,7 @@
             setInterval(function() {
                 // Code to be executed repeatedly
                 document.getElementById("age").innerText = (Date.now() - latest_actual_time)/1000;
-            }, 1000); // Updates every 1000 milliseconds (1 second)
+            }, 500); // Updates every 1000 milliseconds (1 second)
         });
     </script>
 </head>

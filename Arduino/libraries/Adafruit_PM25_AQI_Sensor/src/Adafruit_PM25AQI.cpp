@@ -30,7 +30,7 @@
 
 #include "Adafruit_PM25AQI.h"
 #include "Adafruit_PM25AQI_I2C.h"
-#include "Adafruit_PM25AQI_UART.h"
+//#include "Adafruit_PM25AQI_UART.h"
 
 /*!
  *  @brief  Instantiates a new PM25AQI class
@@ -57,10 +57,10 @@ Adafruit_PM25AQI::~Adafruit_PM25AQI() {
     _pm25_i2c = nullptr;
   }
 
-  if (_pm25_uart != nullptr) {
-    delete _pm25_uart;
-    _pm25_uart = nullptr;
-  }
+//  if (_pm25_uart != nullptr) {
+//    delete _pm25_uart;
+//    _pm25_uart = nullptr;
+//  }
 }
 
 /*!
@@ -103,6 +103,7 @@ bool Adafruit_PM25AQI::begin_I2C(TwoWire *theWire) {
  *         True the sensor is a Cubic PM1006, False otherwise.
  *  @return True
  */
+ /*
 bool Adafruit_PM25AQI::begin_UART(Stream *theSerial, bool is_pm1006) {
   if (_pm25_uart != nullptr) {
     return false;
@@ -110,6 +111,7 @@ bool Adafruit_PM25AQI::begin_UART(Stream *theSerial, bool is_pm1006) {
   _pm25_uart = new Adafruit_PM25AQI_UART(is_pm1006);
   return _pm25_uart->begin(theSerial);
 }
+*/
 
 /*!
  *  @brief  Default implementation of read() that delegates to the
@@ -121,8 +123,8 @@ bool Adafruit_PM25AQI::begin_UART(Stream *theSerial, bool is_pm1006) {
 bool Adafruit_PM25AQI::read(PM25_AQI_Data *data) {
   if (_pm25_i2c != nullptr) {
     return _pm25_i2c->read(data);
-  } else if (_pm25_uart != nullptr) {
-    return _pm25_uart->read(data);
-  }
+  }// else if (_pm25_uart != nullptr) {
+  //  return _pm25_uart->read(data);
+  //}
   return false;
 }

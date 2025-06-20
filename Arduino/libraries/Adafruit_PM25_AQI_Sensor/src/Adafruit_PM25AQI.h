@@ -59,13 +59,13 @@ public:
   virtual ~Adafruit_PM25AQI();
   virtual bool begin();
   bool begin_I2C(TwoWire *theWire = &Wire);
-  bool begin_UART(Stream *theStream, bool is_pm1006 = false);
+//  bool begin_UART(Stream *theStream, bool is_pm1006 = false);
   virtual bool read(PM25_AQI_Data *data);
   void ConvertAQIData(PM25_AQI_Data *data);
 
 protected:
   Adafruit_PM25AQI_I2C *_pm25_i2c = nullptr;
-  Adafruit_PM25AQI_UART *_pm25_uart = nullptr;
+//  Adafruit_PM25AQI_UART *_pm25_uart = nullptr;
   Adafruit_AQIUtils *_aqi_utils = nullptr;
 };
 

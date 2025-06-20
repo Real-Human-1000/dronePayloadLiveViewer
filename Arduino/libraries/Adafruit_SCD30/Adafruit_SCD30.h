@@ -19,7 +19,7 @@
 #include "Arduino.h"
 #include <Adafruit_BusIO_Register.h>
 #include <Adafruit_I2CDevice.h>
-#include <Adafruit_Sensor.h>
+//#include <Adafruit_Sensor.h>
 #include <Wire.h>
 #define SCD30_I2CADDR_DEFAULT 0x61 ///< SCD30 default i2c address
 #define SCD30_CHIP_ID 0x60         ///< SCD30 default device id from WHOAMI
@@ -60,33 +60,33 @@ typedef enum {
 class Adafruit_SCD30;
 
 /** Adafruit Unified Sensor interface for temperature component of SCD30 */
-class Adafruit_SCD30_Temp : public Adafruit_Sensor {
-public:
-  /** @brief Create an Adafruit_Sensor compatible object for the temp sensor
-      @param parent A pointer to the SCD30 class */
-  Adafruit_SCD30_Temp(Adafruit_SCD30 *parent) { _theSCD30 = parent; }
-  bool getEvent(sensors_event_t *);
-  void getSensor(sensor_t *);
+//class Adafruit_SCD30_Temp {
+//public:
+//  /** @brief Create an Adafruit_Sensor compatible object for the temp sensor
+//      @param parent A pointer to the SCD30 class */
+//  Adafruit_SCD30_Temp(Adafruit_SCD30 *parent) { _theSCD30 = parent; }
+//  bool getEvent(sensors_event_t *);
+//  void getSensor(sensor_t *);
 
-private:
-  int _sensorID = 0xC02;
-  Adafruit_SCD30 *_theSCD30 = NULL;
-};
+//private:
+//  int _sensorID = 0xC02;
+//  Adafruit_SCD30 *_theSCD30 = NULL;
+//};
 
 /** Adafruit Unified Sensor interface for the humidity sensor component of SCD30
  */
-class Adafruit_SCD30_Humidity : public Adafruit_Sensor {
-public:
-  /** @brief Create an Adafruit_Sensor compatible object for the humidity sensor
-      @param parent A pointer to the SCD30 class */
-  Adafruit_SCD30_Humidity(Adafruit_SCD30 *parent) { _theSCD30 = parent; }
-  bool getEvent(sensors_event_t *);
-  void getSensor(sensor_t *);
-
-private:
-  int _sensorID = 0xC02 + 1;
-  Adafruit_SCD30 *_theSCD30 = NULL;
-};
+//class Adafruit_SCD30_Humidity : public Adafruit_Sensor {
+//public:
+//  /** @brief Create an Adafruit_Sensor compatible object for the humidity sensor
+//      @param parent A pointer to the SCD30 class */
+//  Adafruit_SCD30_Humidity(Adafruit_SCD30 *parent) { _theSCD30 = parent; }
+//  bool getEvent(sensors_event_t *);
+//  void getSensor(sensor_t *);
+//
+//private:
+//  int _sensorID = 0xC02 + 1;
+//  Adafruit_SCD30 *_theSCD30 = NULL;
+//};
 
 /*!
  *    @brief  Class that stores state and functions for interacting with
@@ -102,7 +102,7 @@ public:
 
   void reset(void);
   bool dataReady(void);
-  bool getEvent(sensors_event_t *humidity, sensors_event_t *temp);
+  //bool getEvent(sensors_event_t *humidity, sensors_event_t *temp);
 
   bool read(void);
 
@@ -124,8 +124,8 @@ public:
   bool forceRecalibrationWithReference(uint16_t reference);
   uint16_t getForcedCalibrationReference(void);
 
-  Adafruit_Sensor *getTemperatureSensor(void);
-  Adafruit_Sensor *getHumiditySensor(void);
+  //Adafruit_Sensor *getTemperatureSensor(void);
+  //Adafruit_Sensor *getHumiditySensor(void);
   float CO2,             ///< The most recent CO2 reading
       temperature,       ///< The most recent temperature reading
       relative_humidity; ///< The most recent relative_humidity reading
@@ -139,19 +139,19 @@ protected:
 
   Adafruit_I2CDevice *i2c_dev = NULL; ///< Pointer to I2C bus interface
 
-  Adafruit_SCD30_Temp *temp_sensor = NULL; ///< Temp sensor data object
-  Adafruit_SCD30_Humidity *humidity_sensor =
-      NULL; ///< Humidity sensor data object
+//  Adafruit_SCD30_Temp *temp_sensor = NULL; ///< Temp sensor data object
+//  Adafruit_SCD30_Humidity *humidity_sensor =
+//      NULL; ///< Humidity sensor data object
 
 private:
-  friend class Adafruit_SCD30_Temp;     ///< Gives access to private members to
+  //friend class Adafruit_SCD30_Temp;     ///< Gives access to private members to
                                         ///< Temp data object
-  friend class Adafruit_SCD30_Humidity; ///< Gives access to private
+  //friend class Adafruit_SCD30_Humidity; ///< Gives access to private
                                         ///< members to Humidity data
                                         ///< object
 
-  void fillHumidityEvent(sensors_event_t *humidity, uint32_t timestamp);
-  void fillTempEvent(sensors_event_t *temp, uint32_t timestamp);
+  //void fillHumidityEvent(sensors_event_t *humidity, uint32_t timestamp);
+  //void fillTempEvent(sensors_event_t *temp, uint32_t timestamp);
   bool sendCommand(uint16_t command, uint16_t argument);
   bool sendCommand(uint16_t command);
   uint16_t getAmbiendPressure(void);

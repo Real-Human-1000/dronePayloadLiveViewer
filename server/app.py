@@ -10,12 +10,14 @@ from time import time_ns
 from datetime import datetime
 import json
 import os
+import signal
+import sys
 
 # Some code taken from https://medium.com/the-research-nest/how-to-log-data-in-real-time-on-a-web-page-using-flask-socketio-in-python-fb55f9dad100
 # And https://projecthub.arduino.cc/ansh2919/serial-communication-between-python-and-arduino-663756
 
 # Set up Serial to communicate with Feather
-s = Serial(port="COM6", baudrate=115200, timeout=0.5)  # change when we actually start talking with Feather
+s = Serial(port="COM8", baudrate=115200, timeout=0.5)  # change when we actually start talking with Feather
 all_samples = {}  # {"sensor": [{"interptime": #, "time": #, "altitude": #, "value": #}, {"interptime": #, "time": #, "altitude": #, "value": #}], "sensor": ...}
 recent_packets = []
 latest_packet_num = 0
@@ -35,6 +37,15 @@ packets_since_log = 0
 max_packets_since_log = 10
 
 
+def handle_termination(signum, frame):
+    s.close()
+    sys.exit(0)
+
+
+signal.signal(signal.SIGINT, handle_termination)
+signal.signal(signal.SIGTERM, handle_termination)
+
+
 def string_to_bytes(s):
     return b''.join([int(s[i * 8: i * 8 + 8][::-1], 2).to_bytes(1, byteorder='big') for i in range(len(s) // 8)])
 
@@ -43,9 +54,10 @@ def determine_packet_type(packet):
     # Determine whether a packet is a data packet, message packet, error packet, sync packet, ack packet, etc.
     # First two bytes are the packet number, third is the packet type
     # Output: packet number, packet type (D, E, A, S, or M)
-    packet_num, packet_type = struct.unpack(endianness + 'Hc', packet[:3])
+    cs1, cs2, cs3, cs4, cs5, cs6, packet_num, packet_type = struct.unpack(endianness + 'ccccccHc', packet[:9])
+    callsign = ''.join([c.decode('ascii') for c in (cs1, cs2, cs3, cs4, cs5, cs6)])
     packet_type = packet_type.decode('ascii')
-    return packet_num, packet_type, packet[3:]
+    return callsign, packet_num, packet_type, packet[9:]
 
 
 def unpack_data_packet(pck):
@@ -66,15 +78,15 @@ def unpack_data_packet(pck):
         data[sample_idx]['time'] /= 4
         data[sample_idx]['altitude'] /= 2
         idx += 2+1+1
-        print(data[sample_idx])
+        # print(data[sample_idx])
         data[sample_idx]['sensors'] = {}
         ordered_sensors = []
         for sensor_idx in range(num_sensors):
             # Get the names of all sensors
             sensor_name_length = struct.unpack(endianness + 'B', pck[idx:idx+1])[0]
-            print(sensor_name_length)
+            # print(sensor_name_length)
             idx += 1
-            print(pck[idx:idx+sensor_name_length])
+            # print(pck[idx:idx+sensor_name_length])
             sensor_name = struct.unpack(endianness + str(sensor_name_length) + 's', pck[idx:idx+sensor_name_length])[0].decode('ascii')
             idx += sensor_name_length
             ordered_sensors.append(sensor_name)
@@ -85,7 +97,7 @@ def unpack_data_packet(pck):
             data[sample_idx]['sensors'][ordered_sensors[sensor_idx]] = sensor_val
             if ordered_sensors[sensor_idx] == "BAT":
                 data[sample_idx]['sensors'][ordered_sensors[sensor_idx]] /= 13107  # convert battery voltage back to 3-5 range
-            print(sensor_val)
+            # print(sensor_val)
     return data
 
 
@@ -144,7 +156,7 @@ def interpret_packet(packet):
     # If it's a sync packet, ignore it
     # If it's an ack packet, ignore it
     global latest_packet_num
-    packet_num, packet_type, packet_content = determine_packet_type(packet)
+    callsign, packet_num, packet_type, packet_content = determine_packet_type(packet)
     print(packet_num, packet_type, packet_content)
     latest_packet_num = max(latest_packet_num, packet_num)
     match packet_type:
@@ -193,11 +205,11 @@ def background_thread():
             # Get latest data from s
             num_bytes = s.in_waiting
             if num_bytes > 0:
-                print(f"{num_bytes} bytes in waiting")
+                # print(f"{num_bytes} bytes in waiting")
                 # There is data waiting to be read
                 packet = s.read(size=num_bytes)
                 s.reset_input_buffer()
-                print(f"Read {packet}")
+                # print(f"Read {packet}")
                 # if b'\r\n' in packet:
                 #     packet = packet.split(b'\r\n')[0]  # If we accidentally miss a packet (or multiple pile up), several packets will be waiting for us; just grab the first one
                 interpret_packet(packet)

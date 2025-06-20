@@ -51,10 +51,10 @@ Adafruit_SCD30::Adafruit_SCD30(void) {}
  *
  */
 Adafruit_SCD30::~Adafruit_SCD30(void) {
-  if (temp_sensor)
-    delete temp_sensor;
-  if (humidity_sensor)
-    delete humidity_sensor;
+//  if (temp_sensor)
+//    delete temp_sensor;
+//  if (humidity_sensor)
+//    delete humidity_sensor;
 }
 
 /*!
@@ -102,8 +102,8 @@ bool Adafruit_SCD30::_init(int32_t sensor_id) {
   if (!setMeasurementInterval(2)) {
     return false;
   }
-  humidity_sensor = new Adafruit_SCD30_Humidity(this);
-  temp_sensor = new Adafruit_SCD30_Temp(this);
+  //humidity_sensor = new Adafruit_SCD30_Humidity(this);
+  //temp_sensor = new Adafruit_SCD30_Temp(this);
   return true;
 }
 
@@ -357,17 +357,17 @@ uint16_t Adafruit_SCD30::readRegister(uint16_t reg_address) {
    component
     @return Adafruit_Sensor pointer to humidity sensor
  */
-Adafruit_Sensor *Adafruit_SCD30::getHumiditySensor(void) {
+/*Adafruit_Sensor *Adafruit_SCD30::getHumiditySensor(void) {
   return humidity_sensor;
-}
+}*/
 
 /*!
     @brief  Gets an Adafruit Unified Sensor object for the temp sensor component
     @return Adafruit_Sensor pointer to temperature sensor
  */
-Adafruit_Sensor *Adafruit_SCD30::getTemperatureSensor(void) {
+/*Adafruit_Sensor *Adafruit_SCD30::getTemperatureSensor(void) {
   return temp_sensor;
-}
+}*/
 
 /**************************************************************************/
 /*!
@@ -378,7 +378,7 @@ Adafruit_Sensor *Adafruit_SCD30::getTemperatureSensor(void) {
     @returns True
 */
 /**************************************************************************/
-bool Adafruit_SCD30::getEvent(sensors_event_t *humidity,
+/*bool Adafruit_SCD30::getEvent(sensors_event_t *humidity,
                               sensors_event_t *temp) {
   uint32_t t = millis();
   if (!read()) {
@@ -408,29 +408,30 @@ void Adafruit_SCD30::fillTempEvent(sensors_event_t *temp, uint32_t timestamp) {
   temp->type = SENSOR_TYPE_AMBIENT_TEMPERATURE;
   temp->timestamp = timestamp;
   temp->temperature = temperature;
-}
+}*/
 
 /**************************************************************************/
 /*!
     @brief  Gets the sensor_t data for the SCD30's humidity
 */
 /**************************************************************************/
-void Adafruit_SCD30_Humidity::getSensor(sensor_t *sensor) {
-  /* Clear the sensor_t object */
-  memset(sensor, 0, sizeof(sensor_t));
-
-  /* Insert the sensor name in the fixed length char array */
-  strncpy(sensor->name, "SCD30_P", sizeof(sensor->name) - 1);
-  sensor->name[sizeof(sensor->name) - 1] = 0;
-  sensor->version = 1;
-  sensor->sensor_id = _sensorID;
-  sensor->type = SENSOR_TYPE_RELATIVE_HUMIDITY;
-  sensor->min_delay = 0;
-  sensor->min_value = 260;
-  sensor->max_value = 1260;
-  // 4096 LSB = 1 hPa >>  1 LSB = 1/4096 hPa >> 1 LSB =  2.441e-4 hPa
-  sensor->resolution = 2.441e-4;
-}
+//
+//void Adafruit_SCD30_Humidity::getSensor(sensor_t *sensor) {
+//  /* Clear the sensor_t object */
+//  memset(sensor, 0, sizeof(sensor_t));
+//
+//  /* Insert the sensor name in the fixed length char array */
+//  strncpy(sensor->name, "SCD30_P", sizeof(sensor->name) - 1);
+//  sensor->name[sizeof(sensor->name) - 1] = 0;
+//  sensor->version = 1;
+//  sensor->sensor_id = _sensorID;
+//  sensor->type = SENSOR_TYPE_RELATIVE_HUMIDITY;
+//  sensor->min_delay = 0;
+//  sensor->min_value = 260;
+//  sensor->max_value = 1260;
+//  // 4096 LSB = 1 hPa >>  1 LSB = 1/4096 hPa >> 1 LSB =  2.441e-4 hPa
+//  sensor->resolution = 2.441e-4;
+//}
 
 /**************************************************************************/
 /*!
@@ -439,34 +440,34 @@ void Adafruit_SCD30_Humidity::getSensor(sensor_t *sensor) {
     @returns True
 */
 /**************************************************************************/
-bool Adafruit_SCD30_Humidity::getEvent(sensors_event_t *event) {
+/*bool Adafruit_SCD30_Humidity::getEvent(sensors_event_t *event) {
   _theSCD30->read();
   _theSCD30->fillHumidityEvent(event, millis());
 
   return true;
-}
+}*/
 
 /**************************************************************************/
 /*!
     @brief  Gets the sensor_t data for the SCD30's tenperature
 */
 /**************************************************************************/
-void Adafruit_SCD30_Temp::getSensor(sensor_t *sensor) {
-  /* Clear the sensor_t object */
-  memset(sensor, 0, sizeof(sensor_t));
-
-  /* Insert the sensor name in the fixed length char array */
-  strncpy(sensor->name, "SCD30_T", sizeof(sensor->name) - 1);
-  sensor->name[sizeof(sensor->name) - 1] = 0;
-  sensor->version = 1;
-  sensor->sensor_id = _sensorID;
-  sensor->type = SENSOR_TYPE_AMBIENT_TEMPERATURE;
-  sensor->min_delay = 0;
-  sensor->min_value = -30;
-  sensor->max_value = 105;
-  // 480 LSB = 1°C >> 1 LSB = 1/480°C >> 1 LSB =  0.00208 °C
-  sensor->resolution = 0.00208;
-}
+//void Adafruit_SCD30_Temp::getSensor(sensor_t *sensor) {
+//  /* Clear the sensor_t object */
+//  memset(sensor, 0, sizeof(sensor_t));
+//
+//  /* Insert the sensor name in the fixed length char array */
+//  strncpy(sensor->name, "SCD30_T", sizeof(sensor->name) - 1);
+//  sensor->name[sizeof(sensor->name) - 1] = 0;
+//  sensor->version = 1;
+//  sensor->sensor_id = _sensorID;
+//  sensor->type = SENSOR_TYPE_AMBIENT_TEMPERATURE;
+//  sensor->min_delay = 0;
+//  sensor->min_value = -30;
+//  sensor->max_value = 105;
+//  // 480 LSB = 1°C >> 1 LSB = 1/480°C >> 1 LSB =  0.00208 °C
+//  sensor->resolution = 0.00208;
+//}
 
 /**************************************************************************/
 /*!
@@ -475,12 +476,12 @@ void Adafruit_SCD30_Temp::getSensor(sensor_t *sensor) {
     @returns True
 */
 /**************************************************************************/
-bool Adafruit_SCD30_Temp::getEvent(sensors_event_t *event) {
-  _theSCD30->read();
-  _theSCD30->fillTempEvent(event, millis());
-
-  return true;
-}
+//bool Adafruit_SCD30_Temp::getEvent(sensors_event_t *event) {
+//  _theSCD30->read();
+//  _theSCD30->fillTempEvent(event, millis());
+//
+//  return true;
+//}
 
 /**
  * Performs a CRC8 calculation on the supplied values.

@@ -25,7 +25,7 @@
 #include "bmp3.h"
 
 #include <Adafruit_I2CDevice.h>
-#include <Adafruit_SPIDevice.h>
+//#include <Adafruit_SPIDevice.h>
 
 /*=========================================================================
     I2C ADDRESS/BITS
@@ -44,10 +44,10 @@ public:
 
   bool begin_I2C(uint8_t addr = BMP3XX_DEFAULT_ADDRESS,
                  TwoWire *theWire = &Wire);
-  bool begin_SPI(uint8_t cs_pin, SPIClass *theSPI = &SPI,
-                 uint32_t frequency = BMP3XX_DEFAULT_SPIFREQ);
-  bool begin_SPI(int8_t cs_pin, int8_t sck_pin, int8_t miso_pin,
-                 int8_t mosi_pin, uint32_t frequency = BMP3XX_DEFAULT_SPIFREQ);
+//  bool begin_SPI(uint8_t cs_pin, SPIClass *theSPI = &SPI,
+//                 uint32_t frequency = BMP3XX_DEFAULT_SPIFREQ);
+//  bool begin_SPI(int8_t cs_pin, int8_t sck_pin, int8_t miso_pin,
+//                 int8_t mosi_pin, uint32_t frequency = BMP3XX_DEFAULT_SPIFREQ);
   uint8_t chipID(void);
   float readTemperature(void);
   float readPressure(void);
@@ -68,7 +68,7 @@ public:
 
 private:
   Adafruit_I2CDevice *i2c_dev = NULL; ///< Pointer to I2C bus interface
-  Adafruit_SPIDevice *spi_dev = NULL; ///< Pointer to SPI bus interface
+//  Adafruit_SPIDevice *spi_dev = NULL; ///< Pointer to SPI bus interface
 
   bool _init(void);
 
