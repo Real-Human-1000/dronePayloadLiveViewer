@@ -1,19 +1,22 @@
 // DAQ Sketch: Take readings from sensors when it's time, collect that into packets, and send them over the radio
 // Define necessary libraries, values, and files
-#define PRINT_SERIAL false
-#define SD_LOGGING true
+#define PRINT_SERIAL
+//#define PRINT_SENSORS
+//#define SD_LOGGING
 
 #include <Wire.h>
 // #include <SPI.h>
 // #include <Adafruit_Sensor.h>
 // #include <RH_RF95.h>
 #include <LoRa.h>
-// #include <SD.h>
-#include <SdFat.h>
+#ifdef SD_LOGGING
+// #include <SdFat.h>
+  #include "PF.h"
+#endif
 
 // BMP388 things
 #include "Adafruit_BMP3XX.h"
-#define SEALEVELPRESSURE_HPA 977.00
+#define SEALEVELPRESSURE_HPA 985.00  // needs to be a value that won't cause the ground to be 0 when the weather barometric pressure changes
 Adafruit_BMP3XX bmp;
 
 // ENS160 things
@@ -48,8 +51,13 @@ Adafruit_PM25AQI pm = Adafruit_PM25AQI();
 #define pm_period 25
 #define battery_period 50
 
-SdFat sd;
-SdFile myFile;
+#ifdef SD_LOGGING
+  // SdFat sd;
+  // SdFile myFile;
+  FATFS fs;     /* File system object */
+  unsigned long fptr = 0;
+  unsigned long total_bytes_written = 0;
+#endif
 
 word packet_num;
 unsigned short loop_decis;
@@ -61,7 +69,7 @@ unsigned short last_pm;
 unsigned short last_battery;
 
 float recent_bmp388_temperature;
-byte recent_bmp388_altitude;
+word recent_bmp388_altitude;
 
 // byte recent_ens160_aqi;  // Small value
 word recent_ens160_tvoc;
@@ -83,6 +91,29 @@ word recent_battery_voltage;  // multiply actual value (3-5) by 13107 & truncate
 // RH_RF95 rf95(RFM95_CS, RFM95_INT);
 
 
+// Function to get parity of number n. It returns 1
+// if n has odd parity, and returns 0 if n has even
+// parity 
+bool getParity(byte n) {
+    bool parity = 0;
+    while (n) {
+        parity = !parity;
+        n = n & (n - 1);
+    }     
+    return parity;
+}
+
+bool getParityArray(byte n[], byte size) {
+  bool parity = 0;
+  for (byte i = 0; i < size; i++) {
+    if (getParity(n[i])) {
+      parity = !parity;
+    }
+  }
+  return parity;
+}
+
+
 void setup() {
   // Setup pins for radio control
   pinMode(LED_BUILTIN, OUTPUT);
@@ -96,23 +127,25 @@ void setup() {
   delay(10);
 
   // Remove the Serial code when not testing
-  if (PRINT_SERIAL) {
+  #ifdef PRINT_SERIAL
     Serial.begin(115200);
     while (!Serial);
-  }
+  #endif
 
-  if (PRINT_SERIAL) {
+  #ifdef PRINT_SERIAL
     Serial.println(F("Boot..."));
-  }
+  #endif
   delay(3000);
-  if (PRINT_SERIAL) {
+  #ifdef PRINT_SERIAL
     Serial.println(F("Begin"));
-  }
+  #endif
 
   // BMP388
   if (!bmp.begin_I2C()) {
     // hardware I2C
-    Serial.println(F("No BMP388"));
+    #ifdef PRINT_SERIAL
+      Serial.println(F("No BMP388"));
+    #endif
     while (1);
   }
 
@@ -124,17 +157,17 @@ void setup() {
 
   // ENS160
   bool ok = ens160.begin();
-  if (PRINT_SERIAL) {
+  #ifdef PRINT_SERIAL
     Serial.print("ENS160... ");
     Serial.println(ens160.available() ? F("done") : F("failed"));
-  }
+  #endif
   if (ens160.available()) {
     // Print ENS160 versions
-    if (PRINT_SERIAL) {
+    #ifdef PRINT_SERIAL
       Serial.print(F("\tREV: ")); Serial.print(ens160.getMajorRev());
       Serial.print(F(".")); Serial.print(ens160.getMinorRev());
       Serial.print(F(".")); Serial.println(ens160.getBuild());
-    }
+    #endif
 
     // Serial.print("\tCustom mode ");
     // ens160.initCustomMode(3);  // example has 3 steps, max 20 steps possible
@@ -144,32 +177,32 @@ void setup() {
     // ens160.addCustomStep(600, 1, 1, 1, 1, 250, 350, 350, 325);  // Step 3: measurements, hot plates
     // Serial.println(ens160.setMode(ENS160_OPMODE_CUSTOM) ? "done" : "failed");
     bool ens_set = ens160.setMode(ENS160_OPMODE_STD);
-    if (PRINT_SERIAL) {
+    #ifdef PRINT_SERIAL
       Serial.print("Set mode: "); Serial.println(ens_set ? F("done") : F("failed"));
-    }
+    #endif
   }
 
   // SCD-30
   if (!scd30.begin()) {
-    if (PRINT_SERIAL) {
+    #ifdef PRINT_SERIAL
       Serial.println(F("No SCD30"));
-    }
+    #endif
     while (1) { delay(10); }
   }
-  if (PRINT_SERIAL) {
+  #ifdef PRINT_SERIAL
     Serial.println(F("SCD30 found"));
-  }
+  #endif
 
   // PMSA003I
   if (!pm.begin_I2C()) {
-    if (PRINT_SERIAL) {
+    #ifdef PRINT_SERIAL
       Serial.println(F("No PM sensor"));
-    }
+    #endif
     while (1) delay(10);
   }
-  if (PRINT_SERIAL) {
-    Serial.println(F("PM found!"));
-  }
+  #ifdef PRINT_SERIAL
+    Serial.println(F("PM found"));
+  #endif
 
   // RFM95 Radio
   // while (!rf95.init()) {
@@ -203,36 +236,125 @@ void setup() {
 
   LoRa.setPins(RFM95_CS, RFM95_RST, RFM95_INT);
   if (!LoRa.begin(RF95_FREQ * 1000000)) {
-    if (PRINT_SERIAL) {
+    #ifdef PRINT_SERIAL
       Serial.println(F("Starting LoRa failed!"));
-    }
+    #endif
     while (1);
   }
   LoRa.setSpreadingFactor(9);
 
-  // if (SD_LOGGING) {
-  //   if (!SD.begin(SD_CS)) {
-  //     if (PRINT_SERIAL) {
-  //       Serial.println(F("Card failed"));
-  //     }
-  //     while (1);
-  //   }
-  //   if (PRINT_SERIAL) {
-  //     Serial.println(F("Card initialized."));
-  //   }
-  // }
+  #ifdef SD_LOGGING
+    // if (!sd.begin(SD_CS, SPI_HALF_SPEED)) {
+    //   #ifdef PRINT_SERIAL
+    //     Serial.println(F("Card failed"));
+    //   #endif
+    //   while (1);
+    // }
+    // #ifdef PRINT_SERIAL
+    //   Serial.println(F("Card initialized."));
+    // #endif
 
-  if (SD_LOGGING) {
-    if (!sd.begin(SD_CS, SPI_HALF_SPEED)) {
-      if (PRINT_SERIAL) {
-        Serial.println(F("Card failed"));
-      }
-      while (1);
+    // Open filesystem on SD card
+    if (PF.begin(&fs)) {
+      #ifdef PRINT_SERIAL
+        Serial.println(F("Error opening filesystem"));
+      #endif
     }
-    if (PRINT_SERIAL) {
-      Serial.println(F("Card initialized."));
+    // Open last.log to see which log file to open
+    if (PF.open("LAST.LOG")) {
+      #ifdef PRINT_SERIAL
+        Serial.println(F("Error opening last.log"));
+      #endif
     }
+    // Read last.log to see which log file was used last
+    // This should just be the first byte
+    char buf[1];
+    UINT nr;
+    if (PF.readFile(buf, sizeof(buf), &nr)) {
+      #ifdef PRINT_SERIAL
+        Serial.println(F("Error reading last.log"));
+      #endif
+    }
+    #ifdef PRINT_SERIAL
+      Serial.print(F("last.log: ")); Serial.println(buf[0]);  // if there's random junk at the end of buf idk what that's about, but I only need the first char
+    #endif
+
+    if (!(buf[0] == '1' || buf[0] == '2' || buf[0] == '3' || buf[0] == '4' || buf[0] == '5')) {
+      #ifdef PRINT_SERIAL
+        Serial.println(F("last.log bad value. Resetting to 1"));
+      #endif
+      buf[0] = '1';
+    }
+    
+    byte new_file_num;
+    byte old_file_num = (byte)atoi(buf);
+    #ifdef PRINT_SERIAL
+      Serial.print(F("Old file num: ")); Serial.println(old_file_num);
+    #endif
+    new_file_num = old_file_num + 1;
+    if (new_file_num > 5) {
+      new_file_num = 1;
+    }
+    #ifdef PRINT_SERIAL
+      Serial.print(F("Last was file ")); Serial.print(buf[0]); Serial.print(F("; using file ")); Serial.println(new_file_num);
+    #endif
+    char char_newfile_num[1];
+    itoa(new_file_num, char_newfile_num, 10);
+    char* char_newfile_num_ptr = &char_newfile_num[0];
+    UINT nw;
+    PF.seek(0);
+    if (PF.writeFile(char_newfile_num_ptr, sizeof(char_newfile_num), &nw)) {
+      #ifdef PRINT_SERIAL
+        Serial.println(F("Error writing to file"));
+      #endif
+    }
+    if (nw != sizeof(char_newfile_num)) {
+      #ifdef PRINT_SERIAL
+        Serial.println(F("Error writing to last.log!"));
+      #endif
+    }
+    if (PF.writeFile(0, 0, &nw)) {
+      #ifdef PRINT_SERIAL
+        Serial.println(F("Error clearing writing cache"));
+      #endif
+    }
+
+    // Blink according to which file is being used; also a confirmation that all sensors booted correctly
+    for (byte i = 0; i < new_file_num; i++) {
+      digitalWrite(LED_BUILTIN, HIGH);
+      delay(500);
+      digitalWrite(LED_BUILTIN, LOW);
+      delay(500);
+    }
+
+    // Open appropriate file
+    char new_file_name[12] = {'D', 'A', 'T', '1', 'M', 'B', '1', '.', 'L', 'O', 'G', '\0'};  // If we're going to be feeding this into functions that expect strings, we have to add a null terminator
+    memcpy(&new_file_name[6], &char_newfile_num, 1);
+    #ifdef PRINT_SERIAL
+      Serial.print(F("New file name: ")); Serial.println(new_file_name);
+    #endif
+    if (PF.open(new_file_name)) {
+      #ifdef PRINT_SERIAL
+        Serial.println(F("Error opening file"));
+      #endif
+    }
+    if (PF.seek(0)) {
+      #ifdef PRINT_SERIAL
+        Serial.println("Unable to seek to beginning of file");
+      #endif
+    }
+
+    // Uhhhhh I'm not going to clear all the data in the file XD
+  #endif
+
+  // Blink to show that all systems are good
+  for (byte i = 0; i < 6; i++) {
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(100);
+    digitalWrite(LED_BUILTIN, LOW);
+    delay(100);
   }
+  delay(500);
 }
 
 void loop() {
@@ -242,11 +364,15 @@ void loop() {
   // BMP Temperature & Pressure/Altimeter
   // We will assume that this is fast and reliable enough to always be correct
   if (bmp.performReading()) {
-    if (PRINT_SERIAL) {
-      Serial.println(F("BMP388"));
-    }
     recent_bmp388_temperature = bmp.temperature;  // float
-    recent_bmp388_altitude = (byte) max(round(bmp.readAltitude(SEALEVELPRESSURE_HPA)) * 2, 0);  // to int half-meters
+    recent_bmp388_altitude = (word) max(round(bmp.readAltitude(SEALEVELPRESSURE_HPA) * 8), 0);  // to int eighth-meters
+    #ifdef PRINT_SERIAL
+      #ifdef PRINT_SENSORS
+        Serial.println(F("BMP388"));
+        Serial.println(recent_bmp388_altitude);
+        Serial.println(bmp.readPressure());
+      #endif
+    #endif
   }
 
   // Sensors / dependent variables:
@@ -254,11 +380,14 @@ void loop() {
   if (loop_decis - last_scd30 > scd30_period) {
     if (scd30.dataReady()) {
       if (scd30.read()) {
-        if (PRINT_SERIAL) {
-          Serial.println(F("SCD30"));
-        }
+        #ifdef PRINT_SERIAL
+          #ifdef PRINT_SENSORS
+            Serial.println(F("SCD30"));
+          #endif
+        #endif
         recent_scd30_temperature = scd30.temperature;  // floats
         recent_scd30_humidity = scd30.relative_humidity;
+        ens160.set_envdata210(recent_scd30_temperature,recent_scd30_humidity);
         recent_scd30_co2 = (word) max(round(scd30.CO2), 0);
         last_scd30 = loop_decis;
       }
@@ -268,9 +397,11 @@ void loop() {
   // ENS160 Gas Sensor
   if (loop_decis - last_ens160 > ens160_period) {
     if (ens160.available()) {
-      if (PRINT_SERIAL) {
-        Serial.println(F("ENS160"));
-      }
+      #ifdef PRINT_SERIAL
+        #ifdef PRINT_SENSORS
+          Serial.println(F("ENS160"));
+        #endif
+      #endif
       ens160.measure(true);  // this takes a lot of time
       // recent_ens160_aqi = ens160.getAQI();  // shorts
       recent_ens160_tvoc = max(ens160.getTVOC(), 0);
@@ -283,9 +414,11 @@ void loop() {
   if (loop_decis - last_pm > pm_period) {
     PM25_AQI_Data data;
     if (pm.read(&data)) {
-      if (PRINT_SERIAL) {
-        Serial.println(F("PM"));
-      }
+      #ifdef PRINT_SERIAL
+        #ifdef PRINT_SENSORS
+          Serial.println(F("PM"));
+        #endif
+      #endif
       recent_pm_particles_03um = max(data.particles_03um, 0);  // uint16_t
       recent_pm_particles_05um = max(data.particles_05um, 0);
       recent_pm_particles_10um = max(data.particles_10um, 0);
@@ -297,9 +430,11 @@ void loop() {
 
   // Battery
   if (loop_decis - last_battery > battery_period) {
-    if (PRINT_SERIAL) {
-      Serial.println(F("Battery"));
-    }
+    #ifdef PRINT_SERIAL
+      #ifdef PRINT_SENSORS
+        Serial.println(F("Battery"));
+      #endif
+    #endif
     float measuredvbat = analogRead(VBATPIN);
     measuredvbat *= 2;    // we divided by 2, so multiply back
     measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
@@ -312,18 +447,24 @@ void loop() {
   if (loop_decis - last_packet > packet_period) {
     // The server can accept packets with multiple samples, but it's actually a lot more difficult to do that, so I won't
     // Also, because I am lazy, this packet is actually much more static than the server version
-    if (PRINT_SERIAL) {
+    #ifdef PRINT_SERIAL
       Serial.println(F("Packet"));
-    }
+    #endif
     digitalWrite(LED_BUILTIN, HIGH); 
 
-    byte length_of_packet = 6 + (2 + 1 + 1) + (2 + 1 + 1) + ((1 + 3) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 3)) + (2 * 9);
+    byte length_of_packet = 1 + 6 + (2 + 1 + 1) + (2 + 2 + 1) + ((1 + 3) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 3)) + (2 * 9);
     byte packet [length_of_packet] = {};
 
-    // callsign
-    char callsign[6] = {'K', 'J', '5', 'I', 'R', 'C'};  // This is Henry Prendergast's callsign; change is Henry isn't present
-    memcpy(&packet[0], &callsign, 6);
-    byte pindex = 6;
+    // Parity byte (parity bit, but it has to be a full byte)
+    // If I have the memory, maybe I'll change this to be full error correction
+    // I would hide this inside of another mostly-unused byte (ex number of samples), but I need to be able to pull this before interpreting anything else
+    // Since we will set this after the rest of the packet has been set, this is just zero
+    byte pindex = 1;
+
+    // Callsign
+    char callsign[6] = {'K', 'J', '5', 'I', 'R', 'C'};  // This is Henry Prendergast's callsign; change if Henry isn't present
+    memcpy(&packet[pindex], &callsign, 6);
+    pindex = pindex + 6;
 
     // Packet number (2b)
     memcpy(&packet[pindex], &packet_num, 2);
@@ -345,11 +486,11 @@ void loop() {
     memcpy(&packet[pindex], &sample_time, 2);
     pindex = pindex + 2;
 
-    // Altitude (half-meters from the ground, 1 byte)
-    memcpy(&packet[pindex], &recent_bmp388_altitude, 1);
-    pindex = pindex + 1;
+    // Altitude (half-meters from the ground, 2 bytes)
+    memcpy(&packet[pindex], &recent_bmp388_altitude, 2);
+    pindex = pindex + 2;
 
-    // Begin section of packet that's basically always the same
+    // Begin section of sample that's basically always the same
 
     // // Number of sensors (variable value, 1 byte)
     // byte num_sensors = 9;
@@ -504,17 +645,21 @@ void loop() {
     // memcpy(&packet[pindex], &recent_battery_voltage, 2);
     // pindex = pindex + 2;
 
-    if (PRINT_SERIAL) {
+    // Apply error checking. Must do this after the rest of the packet has been constructed
+    byte parity_byte = (byte)getParityArray(packet, length_of_packet);
+    memcpy(&packet[0], &parity_byte, 1);
+
+    #ifdef PRINT_SERIAL
       Serial.write(packet, length_of_packet);
       Serial.println();
-    }
+    #endif
 
     // Send packet over radio
     // rf95.send((uint8_t *)packet, length_of_packet);
     while (LoRa.beginPacket() == 0) {
-      if (PRINT_SERIAL) {
+      #ifdef PRINT_SERIAL
         Serial.print(F("Waiting for radio ... "));
-      }
+      #endif
       delay(100);
     }
     LoRa.beginPacket();
@@ -522,50 +667,62 @@ void loop() {
     LoRa.endPacket(true); // true = async / non-blocking mode
 
     // Save packet to log file
-    if (SD_LOGGING) {
-      // // Open the file. note that only one file can be open at a time,
-      // // so you have to close this one before opening another.
-      // File dataFile = SD.open("datalog2.txt", FILE_WRITE);
-
-      // // if the file is available, write to it:
-      // if (dataFile) {
-      //   if (PRINT_SERIAL) {
-      //     Serial.println(F("Saving data"));
-      //   }
-      //   dataFile.write(packet, length_of_packet);
-      //   dataFile.println();
-      //   if (unflushed_packets > packet_flush_limit) {
-      //     dataFile.flush();
-      //     unflushed_packets = 0;
-      //   } else {
-      //     unflushed_packets ++;
-      //   }
-      //   dataFile.close();
-      // }
-      // // if the file isn't open, pop up an error:
-      // else {
-      //   if (PRINT_SERIAL) {
+    #ifdef SD_LOGGING
+      // if (!myFile.open("test.txt", O_RDWR | O_CREAT | O_AT_END)) {
+      //   #ifdef PRINT_SERIAL
       //     Serial.println(F("Error opening log file"));
-      //   }
+      //   #endif
       // }
-      if (!myFile.open("test.txt", O_RDWR | O_CREAT | O_AT_END)) {
-        if (PRINT_SERIAL) {
-          Serial.println(F("Error opening log file"));
-        }
-      }
-      // if the file opened okay, write to it:
-      myFile.println("testing 1, 2, 3.");
+      // // if the file opened okay, write to it:
+      // myFile.println("testing 1, 2, 3.");
 
-      // close the file:
-      myFile.close();
-    }
+      // // close the file:
+      // myFile.close();
+
+      //TODO: think of a way to gracefully save data occasionally without overwriting everything in the file. Maybe make a whole lot of new files so we can hop around every minute?
+      char* packet_ptr = &packet[0];
+      UINT nw;
+      if (PF.writeFile(packet_ptr, length_of_packet, &nw)) {
+        #ifdef PRINT_SERIAL
+          Serial.println("Something's wrong with writing to file");
+        #endif
+      }
+      total_bytes_written = total_bytes_written + nw;
+      if (nw != length_of_packet) {
+        #ifdef PRINT_SERIAL
+          Serial.println("Did not write all bytes; end of section/file reached?");
+          Serial.print("Total bytes written: "); Serial.println(total_bytes_written);
+        #endif
+        // Finalize write of this sector and move seek head
+        // PF.writeFile(0, 0, &nw);
+        // fptr = fptr + 512;
+        // if (fptr > 1024*1023) {
+        //   #ifdef PRINT_SERIAL
+        //     Serial.println("Outside of 1MB file limits");
+        //   #endif
+        //   // maybe actually do something about this?
+        //   fptr = 0;  // I would describe this as a "bad" solution
+        // }
+        // if (PF.seek(fptr)) {
+        //   #ifdef PRINT_SERIAL
+        //     Serial.println("Couldn't seek");
+        //   #endif
+        // }
+      } else {
+          #ifdef PRINT_SERIAL
+            Serial.println("Wrote packet to file successfully");
+          #endif
+      }
+    #endif
     
     digitalWrite(LED_BUILTIN, LOW);
     packet_num ++;
-    last_packet = (unsigned short)(millis() / 100);  // Keep the loop from getting bogged down with packets
+    last_packet = (word)(millis() / 100);  // Keep the loop from getting bogged down with packets by keeping the ACTUAL time of last packet
   }
-  if (PRINT_SERIAL) {
-    Serial.println(F("Waiting..."));
-  }
+  #ifdef PRINT_SERIAL
+    #ifdef PRINT_SENSORS
+      Serial.println(F("Waiting..."));
+    #endif
+  #endif
   delay(100);
 }

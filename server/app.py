@@ -17,12 +17,13 @@ import sys
 # And https://projecthub.arduino.cc/ansh2919/serial-communication-between-python-and-arduino-663756
 
 # Set up Serial to communicate with Feather
-s = Serial(port="COM8", baudrate=115200, timeout=0.5)  # change when we actually start talking with Feather
-all_samples = {}  # {"sensor": [{"interptime": #, "time": #, "altitude": #, "value": #}, {"interptime": #, "time": #, "altitude": #, "value": #}], "sensor": ...}
+s = Serial(port="COM14", baudrate=115200, timeout=0.5)  # change when we actually start talking with Feather
+all_samples = {}
+# {"sensor": [{"interptime": #, "time": #, "altitude": #, "value": #}, {"interptime": #, "time": #, "altitude": #, "value": #}], "sensor": ...}
 recent_packets = []
 latest_packet_num = 0
 initialized = False
-endianness = '<'
+endianness = '<'  # must match Arduino/Feather endianness! Apparently they like little!
 
 # Set up Flask web app
 async_mode = None
@@ -38,7 +39,7 @@ max_packets_since_log = 10
 
 
 def handle_termination(signum, frame):
-    s.close()
+    s.close()  # It's really annoying if the Serial isn't closed because then the computer can't use it
     sys.exit(0)
 
 
@@ -50,63 +51,106 @@ def string_to_bytes(s):
     return b''.join([int(s[i * 8: i * 8 + 8][::-1], 2).to_bytes(1, byteorder='big') for i in range(len(s) // 8)])
 
 
-def determine_packet_type(packet):
+def get_parity(bytes_n):
+    # Function to get parity of bytes n.
+    # Returns 1 if n has odd parity and 0 if n has even parity
+    # This is for bytes objects (multiple bytes)
+    parity = False
+    for i in range(len(bytes_n)):
+        n = bytes_n[i]
+        byte_parity = False
+        while n:
+            byte_parity = not byte_parity
+            n = n & (n - 1)
+        parity = byte_parity ^ parity
+    return parity
+
+
+def separate_preamble(packet):
     # Determine whether a packet is a data packet, message packet, error packet, sync packet, ack packet, etc.
-    # First two bytes are the packet number, third is the packet type
-    # Output: packet number, packet type (D, E, A, S, or M)
-    cs1, cs2, cs3, cs4, cs5, cs6, packet_num, packet_type = struct.unpack(endianness + 'ccccccHc', packet[:9])
-    callsign = ''.join([c.decode('ascii') for c in (cs1, cs2, cs3, cs4, cs5, cs6)])
-    packet_type = packet_type.decode('ascii')
-    return callsign, packet_num, packet_type, packet[9:]
+    # First byte is parity, next six bytes are callsign, next two bytes are the packet number, last is the packet type
+    # This is actually only some of the preamble
+    # Output: success bool, parity bool, callsign string, packet number, packet type (D, E, A, S, or M)
+    try:
+        p, cs1, cs2, cs3, cs4, cs5, cs6, packet_num, packet_type = struct.unpack(endianness + 'BccccccHc', packet[:10])
+        callsign = ''.join([c.decode('ascii') for c in (cs1, cs2, cs3, cs4, cs5, cs6)])
+        packet_type = packet_type.decode('ascii')
+        return True, p, callsign, packet_num, packet_type, packet[10:]
+    except:  # UnicodeDecodeError and struct error
+        print("ASCII error in preamble. Discarding packet")
+        # socketio.emit("error", "ASCII error in preamble. Discarding packet")
+        # Idk if it's smarter to send the error message here, or let the other function do it
+        # I will try to keep all client communication in one function, I think
+        err_msg = "ASCII error in interpreting packet type"
+        return False, 0, "______", -1, "E", struct.pack(endianness + 'B', len(err_msg)) + err_msg.encode('ascii')
 
 
 def unpack_data_packet(pck):
     # Convert a data packet (a series of bytes, no more than 252 bytes long) into a dictionary
     # This is assuming that the first two values of the extended preamble (packet number and type)
     # have already been extracted and removed
-    # Output: dictionary of data from a TX, structured like
+    # Output: success bool, dictionary of data from a TX, structured like
     # {interptime: #, time: #, altitude: #, sensors: {"": #, "": #}}
     data = []
     idx = 0
     samples_format = 'B'
-    num_samples = struct.unpack(endianness + samples_format, pck[idx:idx+1])[0]
+    try:
+        num_samples = struct.unpack(endianness + samples_format, pck[idx:idx+1])[0]
+    except:  # struct error and UnicodeDecodeError
+        print("Error unpacking num samples")
+        return False, {}
     idx += 1
     for sample_idx in range(num_samples):
         data.append({})
         data[sample_idx]['interptime'] = time_ns() # time packet was interpreted; probably similar to time it was broadcast
-        data[sample_idx]['time'], data[sample_idx]['altitude'], num_sensors = struct.unpack(endianness + 'HBB', pck[idx:idx+(2+1+1)])
+        try:
+            data[sample_idx]['time'], data[sample_idx]['altitude'], num_sensors = struct.unpack(endianness + 'HHB', pck[idx:idx+(2+2+1)])
+        except:  # idk what the error would be, but something
+            print("Error unpacking sample values")
+            return False, {}
         data[sample_idx]['time'] /= 4
-        data[sample_idx]['altitude'] /= 2
-        idx += 2+1+1
-        # print(data[sample_idx])
+        data[sample_idx]['altitude'] /= 8
+        idx += 2+2+1
         data[sample_idx]['sensors'] = {}
         ordered_sensors = []
         for sensor_idx in range(num_sensors):
             # Get the names of all sensors
             sensor_name_length = struct.unpack(endianness + 'B', pck[idx:idx+1])[0]
-            # print(sensor_name_length)
+            if sensor_name_length > 5:
+                # Something has definitely gone wrong. We shouldn't have any sensors with a name this long
+                print("Sensor name too long!")
+                return False, {}
             idx += 1
-            # print(pck[idx:idx+sensor_name_length])
-            sensor_name = struct.unpack(endianness + str(sensor_name_length) + 's', pck[idx:idx+sensor_name_length])[0].decode('ascii')
+            try:
+                sensor_name = struct.unpack(endianness + str(sensor_name_length) + 's', pck[idx:idx+sensor_name_length])[0].decode('ascii')
+            except:  # UnicodeDecodeError and struct error
+                print("Error unpacking sensor name")
+                return False, {}
             idx += sensor_name_length
             ordered_sensors.append(sensor_name)
         for sensor_idx in range(num_sensors):
             # Get the actual values of all sensors
-            sensor_val = struct.unpack(endianness + 'H', pck[idx:idx+2])[0]
+            try:
+                sensor_val = struct.unpack(endianness + 'H', pck[idx:idx+2])[0]
+            except:
+                print("Error unpacking sensor values")
+                return False, {}
             idx += 2
             data[sample_idx]['sensors'][ordered_sensors[sensor_idx]] = sensor_val
             if ordered_sensors[sensor_idx] == "BAT":
                 data[sample_idx]['sensors'][ordered_sensors[sensor_idx]] /= 13107  # convert battery voltage back to 3-5 range
-            # print(sensor_val)
-    return data
+    return True, data
 
 
 def unpack_message_packet(pck):
     # Read the message from a message packet, assuming that the packet's extended preamble (time, number, and type)
     # has already been read and extracted
     # Packet content is a ushort and a string
-    msg_length = struct.unpack(endianness + 'B', bytes([pck[0]]))[0]
-    pck_message = struct.unpack(endianness + f'{msg_length}s', pck[1:])[0].decode('ascii')
+    try:
+        msg_length = struct.unpack(endianness + 'B', bytes([pck[0]]))[0]
+        pck_message = struct.unpack(endianness + f'{msg_length}s', pck[1:])[0].decode('ascii')
+    except:
+        return "[Error unpacking message]"
     return pck_message
 
 
@@ -155,19 +199,29 @@ def interpret_packet(packet):
     # If it's an error packet, send it to the client's message box
     # If it's a sync packet, ignore it
     # If it's an ack packet, ignore it
+    # Using socketio.emit() is good when the server is originating an exchange
     global latest_packet_num
-    callsign, packet_num, packet_type, packet_content = determine_packet_type(packet)
+    # Check parity bit to see if any errors have occurred
+    print(packet)
+    actual_parity = get_parity(packet)
+    if not actual_parity:  # = is even
+        print("Packet with incorrect parity. Discarding")
+        socketio.emit("error", "Packet with incorrect parity. Discarding")
+    success, parity, callsign, packet_num, packet_type, packet_content = separate_preamble(packet)
     print(packet_num, packet_type, packet_content)
     latest_packet_num = max(latest_packet_num, packet_num)
     match packet_type:
         case "D":
-            data_from_packet = unpack_data_packet(packet_content)
-            # Send data to client
-            socketio.emit("data", data_from_packet)
-            # Save data to all_samples
-            # packet_data_to_all_samples(data_from_packet)
-            # Put packet in recent_packets for logging
-            recent_packets.append({"type": "D", "data": data_from_packet})
+            success, data_from_packet = unpack_data_packet(packet_content)
+            if success:
+                # Send data to client
+                socketio.emit("data", data_from_packet)
+                # Save data to all_samples
+                # packet_data_to_all_samples(data_from_packet)
+                # Put packet in recent_packets for logging
+                recent_packets.append({"type": "D", "data": data_from_packet})
+            else:
+                socketio.emit("error", "Error unpacking data packet")
         case "M":
             packet_message = unpack_message_packet(packet_content)
             socketio.emit("message", packet_message)
@@ -217,7 +271,6 @@ def background_thread():
                 if packets_since_log >= max_packets_since_log:
                     write_recent_packets_to_log()
                     packets_since_log = 0
-            # using socketio.emit() is good when the server is originating an exchange
 
 
 @app.route("/")

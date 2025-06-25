@@ -22,7 +22,7 @@ void setup() {
   while (!Serial) delay(1);
   delay(100);
 
-  Serial.println("Feather LoRa RX Test!");
+  Serial.println("Waiting for packets...");
 
   // manual reset
   digitalWrite(RFM95_RST, LOW);
