@@ -17,7 +17,7 @@ import sys
 # And https://projecthub.arduino.cc/ansh2919/serial-communication-between-python-and-arduino-663756
 
 # Set up Serial to communicate with Feather
-s = Serial(port="COM14", baudrate=115200, timeout=0.5)  # change when we actually start talking with Feather
+s = Serial(port="COM16", baudrate=115200, timeout=0.5)  # change when we actually start talking with Feather
 all_samples = {}
 # {"sensor": [{"interptime": #, "time": #, "altitude": #, "value": #}, {"interptime": #, "time": #, "altitude": #, "value": #}], "sensor": ...}
 recent_packets = []
@@ -116,6 +116,7 @@ def unpack_data_packet(pck):
         for sensor_idx in range(num_sensors):
             # Get the names of all sensors
             sensor_name_length = struct.unpack(endianness + 'B', pck[idx:idx+1])[0]
+            # print(f"Found a sensor with name length {sensor_name_length}")
             if sensor_name_length > 5:
                 # Something has definitely gone wrong. We shouldn't have any sensors with a name this long
                 print("Sensor name too long!")
@@ -126,6 +127,7 @@ def unpack_data_packet(pck):
             except:  # UnicodeDecodeError and struct error
                 print("Error unpacking sensor name")
                 return False, {}
+            # print(f"Sensor is a {sensor_name}!")
             idx += sensor_name_length
             ordered_sensors.append(sensor_name)
         for sensor_idx in range(num_sensors):
@@ -225,20 +227,20 @@ def interpret_packet(packet):
         case "M":
             packet_message = unpack_message_packet(packet_content)
             socketio.emit("message", packet_message)
-            recent_packets.append({"type": "M", "value": packet_message})
+            recent_packets.append({"type": "M", "interptime": time_ns(), "value": packet_message})
             print(packet_message)
         case "E":
             packet_error = unpack_error_packet(packet_content)
             socketio.emit("error", packet_error)
-            recent_packets.append({"type": "E", "value": packet_error})
+            recent_packets.append({"type": "E", "interptime": time_ns(), "value": packet_error})
             print(packet_error)
         case "A":
             ack_packet_num = unpack_ack_packet(packet_content)
-            recent_packets.append({"type": "A", "packet": ack_packet_num})
+            recent_packets.append({"type": "A", "interptime": time_ns(), "packet": ack_packet_num})
             print(ack_packet_num)
         case "S":
             packet_time = unpack_sync_packet(packet_content)
-            recent_packets.append({"type": "S", "time": packet_time})
+            recent_packets.append({"type": "S", "interptime": time_ns(), "time": packet_time})
             print(packet_time)
 
 
@@ -290,6 +292,12 @@ def connect():
 @socketio.event
 def connect_ack():
     print("A client has connected!")
+
+
+@socketio.event
+def note(user_note):
+    socketio.emit("message", user_note)
+    recent_packets.append({"type": "N", "interptime": time_ns(), "value": user_note})
 
 
 @socketio.event

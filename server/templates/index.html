@@ -33,7 +33,7 @@
         tr                      {border: inherit; border-radius: inherit;}
         thead                   {border: inherit; border-radius: inherit;}
         th                      {border: inherit; border-radius: inherit; padding: 6px; font-weight: bold;}
-        td                      {border: inherit; border-radius: inherit; padding: 6px; text-align: center;}
+        td                      {border: inherit; border-radius: inherit; padding: 6px; text-align: center; margin: auto;}
 
         button                  {border: 4px solid #EAEAEA; border-radius: 6px; color: #EAEAEA; font-family: SourceCodePro, sans-serif; cursor: pointer;}
         button:hover            {filter: brightness(115%);}
@@ -43,6 +43,7 @@
         button#reset-button     {background-color: #A6262E;}
 
         input[type=number]      {width: 60px;}
+        input[type=text]        {background-color: #385648; font-family: SourceCodePro, sans-serif; color: #EAEAEA; width: 90%; border: 2px solid #EAEAEA; border-radius: 6px;}
 
         textarea                {background-color: #385648; font-family: SourceCodePro, sans-serif; color: #EAEAEA; width: 90%; height: 40%; border: 2px solid #EAEAEA; border-radius: 6px;}
     </style>
@@ -77,8 +78,19 @@
         function name_to_color(name) {
             // Convert a string (representing the name of a sensor; any length) into a consistent color
             // Relies on a hashing script from https://stackoverflow.com/questions/7616461/generate-a-hash-from-string-in-javascript
-            return hslToHex(360 * (name.hashCode() % 100) / 100, 100, 50);
+            return hslToHex((Math.sqrt(2) * name.hashCode()) % 360, 100, 50);
         }
+		
+		function median(numbers) {
+			// This assumes that numbers is indeed a list of numbers
+			// Taken from https://stackoverflow.com/questions/45309447/calculating-median-javascript
+			const sorted = Array.from(numbers).sort((a, b) => a - b);
+			const middle = Math.floor(sorted.length / 2);
+			if (sorted.length % 2 === 0) {
+				return (sorted[middle - 1] + sorted[middle]) / 2;
+			}
+			return sorted[middle];
+		}
 
         window.addEventListener("load", function(event) {
             // Rolling records for each sensor type
@@ -90,7 +102,7 @@
             var latest_time = 0;
             var latest_actual_time = Date.now();
 			var latest_altitude = 0;
-			var average_length = 3;  // seconds (actual number of samples in average will vary)
+			var average_length = 1;  // seconds (actual number of samples in average will vary)
 
 			var data_table_body = document.getElementById("data-table-body");
 
@@ -98,6 +110,11 @@
 			record_length_number.value = record_length;
 			var average_length_number = document.getElementById("average-number");
 			average_length_number.value = average_length;
+			var notes_input = document.getElementById('notes-input');
+
+			var chart_altitude_settings = {dataset_x: "value", dataset_y: "altitude"};
+			var chart_time_settings = {dataset_x: "time", dataset_y: "value"};
+			var chart_settings = chart_altitude_settings;
 			
 			// Chart
 			// We need this object later, so we will create it here
@@ -115,25 +132,24 @@
                     maintainAspectRatio: false,
                     showLine: true,
                     scales: {
-                        "readings": {
-                            type: "linear",
-                            position: "bottom",
-                            beginAtZero: true,
-                            title: {
-                                text: "Sensor Readings",
-                                display: true
-                            }
-                        },
-                        "altitude": {
-                            type: "linear",
-                            position: "left",
-                            beginAtZero: true,
-                            //max: 125,
-                            title: {
-                                text: "Altitude",
-                                display: true
-                            }
-                        }
+						"horiz": {
+							type: "linear",
+							position: "bottom",
+							beginAtZero: false,
+							title: {
+								text: "Readings",
+								display: true
+							}
+						},
+						"vert": {
+							type: "linear",
+							position: "left",
+							beginAtZero: true,
+							title: {
+								text: "Altitude",
+								display: true
+							}
+						}
                     },
                     plugins: {
                         title: {
@@ -144,7 +160,7 @@
                             labels: {
                                 filter: function(item) {
                                     return !item.text.includes("smoothed-");
-                                }
+                                }  // Don't show labels for the smoothed lines
                             }
                         }
                     }
@@ -197,6 +213,14 @@
 							let alt_avg_max_cell = document.createElement("td");
 							alt_avg_max_cell.id = "alt-avg-max-cell-" + sensor;
 							sensor_row.appendChild(alt_avg_max_cell);
+							let check_cell = document.createElement("td");
+							check_cell.id = "check-cell-" + sensor;
+							let graph_check = document.createElement("input");
+							graph_check.id = "graph-check-" + sensor;
+							graph_check.type = "checkbox"
+							graph_check.checked = true;
+							check_cell.appendChild(graph_check);
+							sensor_row.appendChild(check_cell);
 							data_table_body.appendChild(sensor_row);
                         }
 						// Add sample to sample record
@@ -208,13 +232,16 @@
 						// Get average sensor value
 						let sum_val = 0;
 						let sum_alt = 0;
+						let sum_time = 0;
 						let sum_count = 0;
 						let max_val = 0;
 						let alt_at_max = 0;
+						
 						for (let rsamp = 0; rsamp < sample_record[sensor].length; rsamp++) {
 							if (latest_time - sample_record[sensor][rsamp]["time"] < average_length) {
 								sum_val = sum_val + sample_record[sensor][rsamp]["value"];
 								sum_alt = sum_alt + sample_record[sensor][rsamp]["altitude"];
+								sum_time = sum_time + sample_record[sensor][rsamp]["time"];
 								sum_count ++;
 							}
 							if (sample_record[sensor][rsamp]["value"] > max_val) {
@@ -222,13 +249,15 @@
 								alt_at_max = sample_record[sensor][rsamp]["altitude"];
 							}
 						}
+						
 						document.getElementById("recent-avg-cell-" + sensor).innerText = Math.round(10 * sum_val / sum_count) / 10;
 						document.getElementById("alt-max-cell-" + sensor).innerText = Math.round(10 * alt_at_max) / 10;
-						sample_record["smoothed-" + sensor].push({"time": data_from_packet[samp]["time"],
+						sample_record["smoothed-" + sensor].push({"time": sum_time / sum_count,
                                                     "altitude": sum_alt / sum_count,
                                                     "value": sum_val / sum_count});
                         let alt_at_avg_max = 0;
                         let max_avg_val = 0;
+						
 						for (let rsamp = 0; rsamp < sample_record["smoothed-" + sensor].length; rsamp++) {
 						    if (sample_record["smoothed-" + sensor][rsamp]["value"] > max_avg_val) {
 						        max_avg_val = sample_record["smoothed-" + sensor][rsamp]["value"];
@@ -236,6 +265,49 @@
 						    }
 						}
 						document.getElementById("alt-avg-max-cell-" + sensor).innerText = Math.floor(10 * alt_at_avg_max) / 10;
+						
+						// Alternative Median-based average. Not used because it didn't seem to be meaningfully different from the standard rolling average
+						/*
+						let val_list = [];
+						let time_list = [];
+						let alt_list = [];
+						let max_val = 0;
+						let alt_at_max = 0;
+						let max_avg_val = 0;
+						let alt_at_avg_max = 0;
+						for (let rsamp = 0; rsamp < sample_record[sensor].length; rsamp++) {
+							if (latest_time - sample_record[sensor][rsamp]["time"] < average_length) {
+								val_list.push(sample_record[sensor][rsamp]["value"]);
+								time_list.push(sample_record[sensor][rsamp]["time"]);
+								alt_list.push(sample_record[sensor][rsamp]["altitude"]);
+							}
+							if (sample_record[sensor][rsamp]["value"] > max_val) {
+								alt_at_max = sample_record[sensor][rsamp]["altitude"];
+								max_val = sample_record[sensor][rsamp]["value"];
+							}
+							// The smoothed record *should* be one element smaller than the standard sensor record
+							if (rsamp < sample_record["smoothed-" + sensor].length) {
+								if (sample_record["smoothed-" + sensor][rsamp]["value"] > max_avg_val) {
+									max_avg_val = sample_record["smoothed-" + sensor][rsamp]["value"];
+									alt_at_avg_max = sample_record["smoothed-" + sensor][rsamp]["altitude"];
+								}
+							}
+						}
+						let med_val = median(val_list);
+						let med_time = median(time_list);
+						let med_alt = median(alt_list);
+						document.getElementById("recent-avg-cell-" + sensor).innerText = Math.round(10 * med_val) / 10;
+						document.getElementById("alt-max-cell-" + sensor).innerText = Math.round(10 * alt_at_max) / 10;
+						sample_record["smoothed-" + sensor].push({"time": med_time,
+                                                    "altitude": med_alt,
+                                                    "value": med_val});
+						if (med_val > max_avg_val) {
+							max_avg_val = med_val;
+							alt_at_avg_max = med_alt;
+						}
+						document.getElementById("alt-avg-max-cell-" + sensor).innerText = Math.floor(10 * alt_at_avg_max) / 10;
+						*/
+						
                     }
 					// Update latest global metrics if this is the most recent packet
 					if (data_from_packet[samp]["time"] > latest_time) {
@@ -259,16 +331,18 @@
                 // Update chart with the new data
 				let new_data = {"datasets": []};
 				for (const [sensor, samples] of Object.entries(sample_record)) {
-					let new_dataset = {"label": sensor, "data": [], showLine: false, yAxisID: 'altitude', xAxisID: 'readings', borderColor: name_to_color(sensor)};
-					if (sensor.includes("smoothed-")) {
-					    new_dataset.showLine = true;
-					    new_dataset.borderColor = name_to_color(sensor.slice(9));
-					    new_dataset.pointRadius = 0;
-				    }
-					for (let samp = 0; samp < sample_record[sensor].length; samp++) {
-						new_dataset["data"].push({"x": sample_record[sensor][samp]["value"], "y": sample_record[sensor][samp]["altitude"]});
+				    if ((!sensor.includes("smoothed-") && document.getElementById("graph-check-" + sensor).checked) || (sensor.includes("smoothed-") && document.getElementById("graph-check-" + sensor.slice(9)).checked)) {
+                        let new_dataset = {"label": sensor, "data": [], showLine: false, yAxisID: "vert", xAxisID: "horiz", borderColor: name_to_color(sensor)};
+                        if (sensor.includes("smoothed-")) {
+                            new_dataset.showLine = true;
+                            new_dataset.borderColor = name_to_color(sensor.slice(9));
+                            new_dataset.pointRadius = 0;
+                        }
+                        for (let samp = 0; samp < sample_record[sensor].length; samp++) {
+                            new_dataset["data"].push({"x": sample_record[sensor][samp][chart_settings.dataset_x], "y": sample_record[sensor][samp][chart_settings.dataset_y]});
+                        }
+                        new_data.datasets.push(new_dataset);
 					}
-					new_data.datasets.push(new_dataset);
 				}
 				chart.data = new_data;
 				chart.update('none');
@@ -330,10 +404,32 @@
                 average_length = average_length_number.value;
             }
 
+            // Handler for notes input
+            notes_input.addEventListener("keyup", ({key}) => {
+                if (key == "Enter") {
+                    socket.emit('note', notes_input.value);
+                    console.log("Noted: " + notes_input.value);
+                    notes_input.value = "";
+                    return false;
+                }
+            })
+
+            document.getElementById('alt-radio').onclick = function(event) {
+				chart_settings = chart_altitude_settings;
+				chart.options.scales.horiz.title.text = "Readings";
+				chart.options.scales.vert.title.text = "Altitude";
+            };
+			
+			document.getElementById('time-radio').onclick = function(event) {
+				chart_settings = chart_time_settings;
+				chart.options.scales.horiz.title.text = "Time";
+				chart.options.scales.vert.title.text = "Readings";
+			};
+			
             setInterval(function() {
                 // Code to be executed repeatedly
                 document.getElementById("age").innerText = (Date.now() - latest_actual_time)/1000;
-            }, 500); // Updates every 1000 milliseconds (1 second)
+            }, 500); // Updates every 500 milliseconds
         });
     </script>
 </head>
@@ -381,17 +477,25 @@
                     <th>Rolling Average</th>
                     <th>Altitude at Actual Max</th>
                     <th>Altitude at Smoothed Max</th>
+                    <th>Graph</th>
                 </tr>
             </thead>
             <tbody id="data-table-body">
             </tbody>
         </table>
         <br>
+        <input type="text" id="notes-input" placeholder="Notes (added to log)...">
         <textarea id="message-box" readonly></textarea>
     </div>
     <div class="right-bar">
         <div id="chart-div">
             <canvas id="chart" width="400" height="400"></canvas>
+        </div>
+        <div style="text-align: center;">
+            <input type="radio" id="alt-radio" name="graph-axis" value="Graph over Altitude" checked="checked">
+			<label for="alt-radio">Altitude-vs-Readings</label>
+            <input type="radio" id="time-radio" name="graph-axis" value="Graph over Time">
+			<label for="time-radio">Readings-vs-Time</label>
         </div>
     </div>
 </body>

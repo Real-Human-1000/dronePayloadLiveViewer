@@ -1,6 +1,6 @@
 // DAQ Sketch: Take readings from sensors when it's time, collect that into packets, and send them over the radio
 // Define necessary libraries, values, and files
-#define PRINT_SERIAL
+//#define PRINT_SERIAL
 //#define PRINT_SENSORS
 //#define SD_LOGGING
 
@@ -76,7 +76,7 @@ word recent_ens160_tvoc;
 word recent_ens160_eco2;
 
 float recent_scd30_temperature;
-float recent_scd30_humidity;
+word recent_scd30_humidity;
 word recent_scd30_co2;
 
 word recent_pm_particles_03um;  // I'm going to assume that these aren't going to go above 65,535
@@ -386,7 +386,7 @@ void loop() {
           #endif
         #endif
         recent_scd30_temperature = scd30.temperature;  // floats
-        recent_scd30_humidity = scd30.relative_humidity;
+        recent_scd30_humidity = (word) max(round(scd30.relative_humidity), 0);
         ens160.set_envdata210(recent_scd30_temperature,recent_scd30_humidity);
         recent_scd30_co2 = (word) max(round(scd30.CO2), 0);
         last_scd30 = loop_decis;
@@ -452,7 +452,7 @@ void loop() {
     #endif
     digitalWrite(LED_BUILTIN, HIGH); 
 
-    byte length_of_packet = 1 + 6 + (2 + 1 + 1) + (2 + 2 + 1) + ((1 + 3) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 3)) + (2 * 9);
+    byte length_of_packet = 1 + 6 + (2 + 1 + 1) + (2 + 2 + 1) + ((1 + 3) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 4) + (1 + 3) + (1 + 3)) + (2 * 10);
     byte packet [length_of_packet] = {};
 
     // Parity byte (parity bit, but it has to be a full byte)
@@ -493,7 +493,7 @@ void loop() {
     // Begin section of sample that's basically always the same
 
     // // Number of sensors (variable value, 1 byte)
-    // byte num_sensors = 9;
+    // byte num_sensors = 10;
     // memcpy(&packet[pindex], &num_sensors, 1);
     // pindex = pindex + 1;
 
@@ -587,15 +587,20 @@ void loop() {
     // memcpy(&packet[pindex], &name_sens9, numchar_sens9);
     // pindex = pindex + 3;
 
+    // // Name of sensor 10 = "HUM"
+    // char name_sens10[3] = {'H', 'U', 'M'};
+    // memcpy(&packet[pindex], &numchar_sens10, 1);
+    // pindex = pindex + 1;
+
     // End section of packet that's always the same
     // Just directly applying this portion of the packet to save space
-    byte section[44] = {9,3,67,79,50,4,84,86,79,67,4,101,67,79,50,4,80,77,48,51,4,80,77,48,53,4,80,77,49,48,4,80,77,50,53,4,80,77,53,48,3,66,65,84};
-    memcpy(&packet[pindex], &section, 44);
-    pindex = pindex + 44;
+    byte section[48] = {10,3,67,79,50,4,84,86,79,67,4,101,67,79,50,4,80,77,48,51,4,80,77,48,53,4,80,77,49,48,4,80,77,50,53,4,80,77,53,48,3,66,65,84,3,72,85,77};
+    memcpy(&packet[pindex], &section, 48);
+    pindex = pindex + 48;
 
     // We can put all the sensor values in a loop because they're all words
-    word sensor_vals [9] = {recent_scd30_co2, recent_ens160_tvoc, recent_ens160_eco2, recent_pm_particles_03um, recent_pm_particles_05um, recent_pm_particles_10um, recent_pm_particles_25um, recent_pm_particles_50um, recent_battery_voltage};
-    for (byte s = 0; s < 9; s++) {
+    word sensor_vals [10] = {recent_scd30_co2, recent_ens160_tvoc, recent_ens160_eco2, recent_pm_particles_03um, recent_pm_particles_05um, recent_pm_particles_10um, recent_pm_particles_25um, recent_pm_particles_50um, recent_battery_voltage, recent_scd30_humidity};
+    for (byte s = 0; s < 10; s++) {
       memcpy(&packet[pindex], &sensor_vals[s], 2);
       pindex = pindex + 2;
     }
@@ -643,6 +648,11 @@ void loop() {
     // // Value of sensor 9
     // //recent_battery_voltage
     // memcpy(&packet[pindex], &recent_battery_voltage, 2);
+    // pindex = pindex + 2;
+
+    // // Value of sensor 10
+    // //recent_scd30_humidity
+    // memcpy(&packet[pindex], &recent_scd30_humidity, 2);
     // pindex = pindex + 2;
 
     // Apply error checking. Must do this after the rest of the packet has been constructed
