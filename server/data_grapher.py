@@ -12,11 +12,11 @@ def load_log(filename):
 
 
 def main():
-    log_filename = "logs\\log_2025-06-26_09-21-33.json"
+    log_filename = "logs\\log_2025-06-28_21-20-30.json"
     log_data = load_log(log_filename)
 
     independent_var = "interptime"
-    dependent_vars = ["PM50"]
+    dependent_vars = ["PM03", "PM10"]
     # PM03 and PM05 have a lot of false positives
     # PM10 and above seem to be good at detecting smoke
     # CO2 basically doesn't respond at all
@@ -47,8 +47,8 @@ def main():
     fig, ax1 = plt.subplots()
     ax1.set_xlabel(independent_var)
     ax1.set_ylabel(dependent_vars[0], color="tab:red")
-    ax1.plot([d["data"][0][independent_var] for d in log_data if d["type"] == 'D'],
-             [d["data"][0]["sensors"][dependent_vars[0]] for d in log_data if d["type"] == 'D'],
+    ax1.plot([d["data"][0][independent_var] for d in log_data if d["type"] == 'D' and independent_var in d["data"][0]],
+             [d["data"][0]["sensors"][dependent_vars[0]] for d in log_data if d["type"] == 'D' and dependent_vars[0] in d["data"][0]["sensors"] and dependent_vars[1] in d["data"][0]["sensors"]],
              color="tab:red")
     ax1.tick_params(axis='y', labelcolor="tab:red")
 
@@ -60,9 +60,9 @@ def main():
                  [d["data"][0]["sensors"][dependent_vars[1]] for d in log_data if d["type"] == 'D'],
                  color="tab:blue")
         ax2.tick_params(axis='y', labelcolor="tab:blue")
-        plt.title(f"{independent_var} vs {dependent_vars[0]} and {dependent_vars[1]}")
+        plt.title(f"{dependent_vars[0]} and {dependent_vars[1]} vs {independent_var}")
     else:
-        plt.title(f"{independent_var} vs {dependent_vars[0]}")
+        plt.title(f"{dependent_vars[0]} vs {independent_var}")
 
     # Add annotations for user notes
     for n in [d for d in log_data if d["type"] == "N"]:

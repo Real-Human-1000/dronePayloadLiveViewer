@@ -17,7 +17,7 @@ import sys
 # And https://projecthub.arduino.cc/ansh2919/serial-communication-between-python-and-arduino-663756
 
 # Set up Serial to communicate with Feather
-s = Serial(port="COM16", baudrate=115200, timeout=0.5)  # change when we actually start talking with Feather
+s = SerialSim(port="COM14", baudrate=115200, timeout=0.5)  # change when we actually start talking with Feather
 all_samples = {}
 # {"sensor": [{"interptime": #, "time": #, "altitude": #, "value": #}, {"interptime": #, "time": #, "altitude": #, "value": #}], "sensor": ...}
 recent_packets = []

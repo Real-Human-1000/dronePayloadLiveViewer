@@ -1,7 +1,7 @@
 // DAQ Sketch: Take readings from sensors when it's time, collect that into packets, and send them over the radio
 // Define necessary libraries, values, and files
-//#define PRINT_SERIAL
-//#define PRINT_SENSORS
+#define PRINT_SERIAL
+#define PRINT_SENSORS
 //#define SD_LOGGING
 
 #include <Wire.h>
@@ -16,7 +16,7 @@
 
 // BMP388 things
 #include "Adafruit_BMP3XX.h"
-#define SEALEVELPRESSURE_HPA 985.00  // needs to be a value that won't cause the ground to be 0 when the weather barometric pressure changes
+#define SEALEVELPRESSURE_HPA 982.00  // needs to be a value that won't cause the ground to be 0 when the weather barometric pressure changes
 Adafruit_BMP3XX bmp;
 
 // ENS160 things
@@ -80,7 +80,7 @@ word recent_scd30_humidity;
 word recent_scd30_co2;
 
 word recent_pm_particles_03um;  // I'm going to assume that these aren't going to go above 65,535
-word recent_pm_particles_05um;
+word recent_pm_particles_05um;  // after testing, this isn't true (PM03 can go above 65535), so they have now been clamped
 word recent_pm_particles_10um;
 word recent_pm_particles_25um;
 word recent_pm_particles_50um;
@@ -153,7 +153,7 @@ void setup() {
   bmp.setTemperatureOversampling(BMP3_OVERSAMPLING_2X);
   bmp.setPressureOversampling(BMP3_OVERSAMPLING_8X);
   bmp.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_3);
-  bmp.setOutputDataRate(BMP3_ODR_50_HZ);
+  bmp.setOutputDataRate(BMP3_ODR_25_HZ);
 
   // ENS160
   bool ok = ens160.begin();
@@ -361,22 +361,42 @@ void loop() {
   // Independent variables:
   loop_decis = (unsigned short)(millis() / 100);
 
+  #ifdef PRINT_SERIAL
+    #ifdef PRINT_SENSORS
+      Serial.print("Last packet: "); Serial.print(last_packet); Serial.print(", last scd30: "); Serial.print(last_scd30); Serial.print(", last ens160: "); Serial.print(last_ens160); Serial.print(", last pm: "); Serial.print(last_pm); Serial.print(", last battery: "); Serial.println(last_battery);
+    #endif
+  #endif
+
+  #ifdef PRINT_SERIAL
+    #ifdef PRINT_SENSORS
+      Serial.println("About to check BMP388");
+    #endif
+  #endif
   // BMP Temperature & Pressure/Altimeter
   // We will assume that this is fast and reliable enough to always be correct
   if (bmp.performReading()) {
     recent_bmp388_temperature = bmp.temperature;  // float
-    recent_bmp388_altitude = (word) max(round(bmp.readAltitude(SEALEVELPRESSURE_HPA) * 8), 0);  // to int eighth-meters
+    recent_bmp388_altitude = (word) min(max(round(bmp.readAltitude(SEALEVELPRESSURE_HPA) * 8), 0), 65535);  // to int eighth-meters
     #ifdef PRINT_SERIAL
       #ifdef PRINT_SENSORS
         Serial.println(F("BMP388"));
-        Serial.println(recent_bmp388_altitude);
-        Serial.println(bmp.readPressure());
+      #endif
+    #endif
+  } else {
+    #ifdef PRINT_SERIAL
+      #ifdef PRINT_SENSORS
+        Serial.println("BMP388 perform reading failed");
       #endif
     #endif
   }
 
   // Sensors / dependent variables:
   // SCD-30 CO2 / Temp / Humidity sensor
+  #ifdef PRINT_SERIAL
+    #ifdef PRINT_SENSORS
+      Serial.println("About to check SCD30");
+    #endif
+  #endif
   if (loop_decis - last_scd30 > scd30_period) {
     if (scd30.dataReady()) {
       if (scd30.read()) {
@@ -386,15 +406,20 @@ void loop() {
           #endif
         #endif
         recent_scd30_temperature = scd30.temperature;  // floats
-        recent_scd30_humidity = (word) max(round(scd30.relative_humidity), 0);
+        recent_scd30_humidity = (word) min(max(round(scd30.relative_humidity), 0), 65535);
         ens160.set_envdata210(recent_scd30_temperature,recent_scd30_humidity);
-        recent_scd30_co2 = (word) max(round(scd30.CO2), 0);
+        recent_scd30_co2 = (word) min(max(round(scd30.CO2), 0), 65535);
         last_scd30 = loop_decis;
       }
     }
   }
 
   // ENS160 Gas Sensor
+  #ifdef PRINT_SERIAL
+    #ifdef PRINT_SENSORS
+      Serial.println("About to check END160");
+    #endif
+  #endif
   if (loop_decis - last_ens160 > ens160_period) {
     if (ens160.available()) {
       #ifdef PRINT_SERIAL
@@ -404,13 +429,18 @@ void loop() {
       #endif
       ens160.measure(true);  // this takes a lot of time
       // recent_ens160_aqi = ens160.getAQI();  // shorts
-      recent_ens160_tvoc = max(ens160.getTVOC(), 0);
-      recent_ens160_eco2 = max(ens160.geteCO2(), 0);
+      recent_ens160_tvoc = min(max(ens160.getTVOC(), 0), 65535);
+      recent_ens160_eco2 = min(max(ens160.geteCO2(), 0), 65535);
       last_ens160 = loop_decis;
     }
   }
 
   // PMSA003I Particle sensor
+  #ifdef PRINT_SERIAL
+    #ifdef PRINT_SENSORS
+      Serial.println("About to check PMSA003I");
+    #endif
+  #endif
   if (loop_decis - last_pm > pm_period) {
     PM25_AQI_Data data;
     if (pm.read(&data)) {
@@ -419,16 +449,21 @@ void loop() {
           Serial.println(F("PM"));
         #endif
       #endif
-      recent_pm_particles_03um = max(data.particles_03um, 0);  // uint16_t
-      recent_pm_particles_05um = max(data.particles_05um, 0);
-      recent_pm_particles_10um = max(data.particles_10um, 0);
-      recent_pm_particles_25um = max(data.particles_25um, 0);
-      recent_pm_particles_50um = max(data.particles_50um, 0);
+      recent_pm_particles_03um = min(max(data.particles_03um, 0), 65535);  // uint16_t
+      recent_pm_particles_05um = min(max(data.particles_05um, 0), 65535);
+      recent_pm_particles_10um = min(max(data.particles_10um, 0), 65535);
+      recent_pm_particles_25um = min(max(data.particles_25um, 0), 65535);
+      recent_pm_particles_50um = min(max(data.particles_50um, 0), 65535);
       last_pm = loop_decis;
     }
   }
 
   // Battery
+  #ifdef PRINT_SERIAL
+    #ifdef PRINT_SENSORS
+      Serial.println("About to check Battery");
+    #endif
+  #endif
   if (loop_decis - last_battery > battery_period) {
     #ifdef PRINT_SERIAL
       #ifdef PRINT_SENSORS
@@ -439,9 +474,13 @@ void loop() {
     measuredvbat *= 2;    // we divided by 2, so multiply back
     measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
     measuredvbat /= 1024; // convert to voltage
-    recent_battery_voltage = (word) max(floor(13107 * measuredvbat), 0);
+    recent_battery_voltage = (word) min(max(floor(13107 * measuredvbat), 0), 65535);
     last_battery = loop_decis;
   }
+
+  #ifdef PRINT_SERIAL
+    Serial.println(F("Got through all sensors"));
+  #endif
 
   // Time to send a packet
   if (loop_decis - last_packet > packet_period) {

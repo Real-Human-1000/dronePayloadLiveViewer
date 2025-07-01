@@ -1,0 +1,88 @@
+:root {
+    --crt-bg-color:#1f1f1f;
+    --crt-line-color:#ffa828;
+    --reset-color:#A6262E;
+    --body-bg-color:#8c8173;
+    --box-bg-color:#f4e5d0;
+    --box-border-color:#ab9c89;
+    --print-bg-color:#ffffff;
+    --print-line-color:#0f000f;
+    --random-translation:10px;
+    --random-brightness:50%;
+    --chart-font:VT323;
+    --chart-line-color:#ffa828;
+}
+
+@font-face {
+    font-family: SaturnV;
+    font-weight: bold;
+    src: url("fonts/SaturnV.otf") format("opentype");
+}
+@font-face {
+    font-family: VT323;
+    font-weight: regular;
+    src: url("fonts/VT323-Regular.ttf");
+}
+
+
+html                    {box-sizing: border-box;}
+*, *:before, *:after    {box-sizing: inherit;}
+body                    {background: var(--body-bg-color); color: var(--print-line-color); font-family: monospace;}
+
+div.right-bar           {height: 100%; width: 40%; position: fixed; top: 15px; right: 15px; overflow-x: hidden; border: 8px ridge var(--box-border-color); background: var(--box-bg-color); font-weight: normal; border-radius: 2px;}
+div.left-bar            {height: 100%; width: 60%; position: fixed; top: 15px; left: 15px; overflow-x: hidden; border: 8px ridge var(--box-border-color); background: var(--box-bg-color); font-weight: normal; border-radius: 2px;}
+div#chart-div           {background: linear-gradient(
+                            to bottom,
+                            rgba(255,255,255,0),
+                            rgba(255,255,255,0) 50%,
+                            rgba(0,0,0,0.2) 70%,
+                            rgba(0,0,0,0.6)
+                          );
+                          background-size: 100% 0.3rem;
+                          filter: brightness(var(--random-brightness)); background-color: var(--crt-bg-color); width: 100%; height: 95%; border: 16px inset var(--box-border-color); border-radius: 2px; color: var(--crt-line-color); font-family: VT323, monosapce;}
+
+canvas#chart            {filter: drop-shadow(0 0 6px var(--crt-line-color));}
+
+h1                      {font-family: SaturnV, monospace; font-weight: bold; text-transform: lowercase;}
+h2                      {font-family: SaturnV, monospace; font-weight: bold; text-transform: lowercase;}
+p                       {font-weight: normal;}
+
+table                   {width: 90%; border: 8px ridge var(--box-border-color); border-radius: 2px;}
+table.invisible-table   {background: var(--box-bg-color);}
+table.visible-table     {background: var(--box-bg-color); font-weight: normal; border-radius: 2px; border-spacing: 2px; table-layout: fixed;}
+table#data-table        {background: linear-gradient(
+                            to bottom,
+                            rgba(255,255,255,0),
+                            rgba(255,255,255,0) 50%,
+                            rgba(0,0,0,0.2) 70%,
+                            rgba(0,0,0,0.6)
+                          );
+                          background-size: 100% 0.3rem;
+                         text-shadow: 0 0 10px var(--crt-line-color); filter: blur(.5px); filter: brightness(var(--random-brightness)); background-color: var(--crt-bg-color); color: var(--crt-line-color); font-weight: normal; border-spacing: 2px; table-layout: fixed; font-family: VT323, monospace; border: 16px inset var(--box-border-color);}
+tbody#data-table-body   {border: transparent; border-radius: inherit;}
+tr                      {border: inherit; border-radius: inherit;}
+thead                   {border: inherit; border-radius: inherit;}
+thead#data-table-head   {border: 2px solid var(--crt-line-color); border-radius: inherit;}
+th                      {border: inherit; border-radius: inherit; padding: 6px; font-weight: bold;}
+td                      {border: inherit; border-radius: inherit; padding: 6px; text-align: center; margin: auto;}
+
+button                  {border: 4px outset var(--box-border-color); border-radius: 2px; color: var(--print-line-color); font-family: monospace, sans-serif; cursor: pointer;}
+button:hover            {filter: brightness(115%);}
+button:active           {filter: brightness(85%); border: 4px inset var(--box-border-color);}
+button:disabled         {filter: brightness(85%); border: 4px inset var(--box-border-color);}
+button#init-button      {background-color: var(--box-border-color);}
+button#reset-button     {background-color: var(--reset-color);}
+
+input[type=number]      {text-shadow: 0 0 10px var(--crt-line-color); filter: blur(.5px); filter: brightness(var(--random-brightness)); background-color: var(--crt-bg-color); color: var(--crt-line-color); accent-color: var(--crt-line-color); width: 80px; font-family: VT323, monospace; border: 16px inset var(--box-border-color); border-radius: 2px;}
+input[type=text]        {text-shadow: 0 0 10px var(--crt-line-color); filter: blur(.5px); filter: brightness(var(--random-brightness)); background-color: var(--crt-bg-color); border: 16px inset var(--box-border-color); border-radius: 2px; font-family: VT323, monospace; color: var(--crt-line-color); accent-color: var(--crt-line-color); width: 90%;}
+input[type=radio]       {background-color: transparent; color: var(--box-border-color); accent-color: var(--print-line-color);}
+input[type=checkbox]    {background-color: transparent; color: var(--box-border-color); accent-color: var(--print-line-color);}
+
+textarea                {background-image:
+                            linear-gradient(90deg, transparent 5%, #abced4 5%, #abced4 5.5%, transparent 5.5%),
+                            linear-gradient(90deg, transparent 94.5%, #abced4 94.5%, #abced4 95%, transparent 95%),
+                            linear-gradient(#eee .1em, transparent .1em);
+                         position: absolute;
+                         background-size: 100% 1.2em;
+                         box-shadow: inset 0 0.2em 0.2em black;
+                         background-color: var(--print-bg-color); font-family: monospace; color: var(--print-line-color); width: 90%; height: 20%; border: 2px solid var(--print-line-color); border-radius: 2px; accent-color: var(--print-line-color); resize: vertical;}

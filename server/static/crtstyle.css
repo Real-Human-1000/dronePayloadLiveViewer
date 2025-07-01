@@ -1,0 +1,72 @@
+:root {
+    --bg-color:#1f1f1f;
+    --cell-color:#1f1f1f;
+    --line-color:#ffa828;
+    --reset-color:#1f1f1f;
+    --random-translation:10px;
+    --random-brightness:50%;
+}
+
+/* something to look into: https://codepen.io/somethingformed/pen/raWJXV?editors=1100 (not currently implemented)*/
+
+@font-face {
+    font-family: SeaweedSans;
+    font-weight: normal;
+    src: url("fonts/SeaweedSans-Regular.otf") format("opentype");
+}
+@font-face {
+    font-family: SeaweedSans;
+    font-weight: bold;
+    src: url("fonts/SeaweedSans-Regular.otf") format("opentype");
+}
+
+html                    {box-sizing: border-box; filter: blur(.8px);}
+*, *:before, *:after    {box-sizing: inherit;}
+body                    {background: linear-gradient(to top, #000000, #000000, #333333, #333333);
+                        background-size: cover; 100% 1px;
+                        text-shadow: 0 0 10px var(--line-color);
+                        color: var(--line-color); font-family: monospace;}
+
+@media screen{
+  body {
+    animation: scanlines infinite 2s linear;
+  }
+}
+@keyframes scanlines {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 0 -10px;
+  }
+}
+
+div.right-bar           {filter: brightness(var(--random-brightness)); transform: translateX(var(--random-translation)); height: 100%; width: 40%; position: fixed; top: 15px; right: 15px; overflow-x: hidden;}
+div.left-bar            {filter: brightness(var(--random-brightness)); transform: translateX(var(--random-translation)); height: 100%; width: 60%; position: fixed; top: 15px; left: 15px; overflow-x: hidden;}
+div#chart-div           {background-color: transparent; width: 100%; height: 95%; border: 2px solid var(--line-color); border-radius: 6px;}
+
+h1                      {font-family: SeaweedSans, monospace; font-weight: bold;}
+h2                      {font-family: SeaweedSans, monospace; font-weight: normal;}
+p                       {font-weight: normal;}
+
+table                   {width: 90%}
+table.invisible-table   {}
+table.visible-table     {background-color: transparent; border: 2px solid var(--line-color); font-weight: normal; border-radius: 6px; border-spacing: 2px; table-layout: fixed;}
+tr                      {border: inherit; border-radius: inherit;}
+thead                   {border: inherit; border-radius: inherit;}
+th                      {border: inherit; border-radius: inherit; padding: 6px; font-weight: bold;}
+td                      {border: inherit; border-radius: inherit; padding: 6px; text-align: center; margin: auto;}
+
+button                  {border: 4px solid var(--line-color); border-radius: 6px; color: var(--line-color); font-family: monospace, sans-serif; cursor: pointer;}
+button:hover            {filter: brightness(115%);}
+button:active           {filter: brightness(85%);}
+button:disabled         {filter: brightness(85%);}
+button#init-button      {background-color: transparent;}
+button#reset-button     {background-color: transparent;}
+
+input[type=number]      {background-color: transparent; color: var(--line-color); accent-color: var(--line-color); width: 60px;}
+input[type=text]        {background-color: transparent; font-family: monospace; color: var(--line-color); accent-color: var(--line-color); width: 90%; border: 2px solid var(--line-color); border-radius: 6px;}
+input[type=radio]       {background-color: transparent; color: var(--line-color); accent-color: var(--line-color);}
+input[type=checkbox]    {background-color: transparent; color: var(--line-color); accent-color: var(--line-color);}
+
+textarea                {background-color: transparent; font-family: SourceCodePro, sans-serif; color: var(--line-color); width: 90%; height: 20%; border: 2px solid var(--line-color); border-radius: 6px; accent-color: var(--line-color); resize: vertical;}

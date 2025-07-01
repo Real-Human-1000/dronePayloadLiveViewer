@@ -3,52 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <title>Live Viewer</title>
-    <style>
-        @font-face {
-			font-family: SourceCodePro;
-			font-weight: normal;
-			src: url("{{ url_for('static', filename='fonts/SourceCodePro-Regular.otf')}}") format("opentype");
-		}
-        @font-face {
-		    font-family: SourceCodePro;
-		    font-weight: bold;
-		    src: url("{{ url_for('static', filename='fonts/SourceCodePro-Bold.otf')}}") format("opentype");
-		}
-
-		html                    {box-sizing: border-box;}
-        *, *:before, *:after    {box-sizing: inherit;}
-        body                    {background-color: #252855; color: #EAEAEA; font-family: SourceCodePro, sans-serif;}
-
-		div.right-bar           {height: 100%; width: 40%; position: fixed; top: 15px; right: 15px; overflow-x: hidden;}
-		div.left-bar            {height: 100%; width: 60%; position: fixed; top: 15px; left: 15px; overflow-x: hidden;}
-        div#chart-div           {background-color: #385648; width: 100%; height: 95%; border: 2px solid #EAEAEA; border-radius: 6px;}
-
-        h1                      {font-weight: bold;}
-        h2                      {font-weight: normal;}
-        p                       {font-weight: normal;}
-
-        table                   {width: 90%}
-        table.invisible-table   {}
-        table.visible-table     {background-color: #385648; border: 2px solid #EAEAEA; font-weight: normal; border-radius: 6px; border-spacing: 2px; table-layout: fixed;}
-        tr                      {border: inherit; border-radius: inherit;}
-        thead                   {border: inherit; border-radius: inherit;}
-        th                      {border: inherit; border-radius: inherit; padding: 6px; font-weight: bold;}
-        td                      {border: inherit; border-radius: inherit; padding: 6px; text-align: center; margin: auto;}
-
-        button                  {border: 4px solid #EAEAEA; border-radius: 6px; color: #EAEAEA; font-family: SourceCodePro, sans-serif; cursor: pointer;}
-        button:hover            {filter: brightness(115%);}
-        button:active           {filter: brightness(85%);}
-        button:disabled         {filter: brightness(85%);}
-        button#init-button      {background-color: #385648;}
-        button#reset-button     {background-color: #A6262E;}
-
-        input[type=number]      {width: 60px;}
-        input[type=text]        {background-color: #385648; font-family: SourceCodePro, sans-serif; color: #EAEAEA; width: 90%; border: 2px solid #EAEAEA; border-radius: 6px;}
-
-        textarea                {background-color: #385648; font-family: SourceCodePro, sans-serif; color: #EAEAEA; width: 90%; height: 40%; border: 2px solid #EAEAEA; border-radius: 6px;}
-    </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.0.4/socket.io.js" integrity="sha512-aMGMvNYu8Ue4G+fHa359jcPb1u+ytAF+P2SCb+PxrjCdO3n3ZTxJ30zuH39rimUggmTwmh2u7wvQsDTHESnmfQ==" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='retrostyle.css')}}">
+    <!--<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.0.4/socket.io.js" integrity="sha512-aMGMvNYu8Ue4G+fHa359jcPb1u+ytAF+P2SCb+PxrjCdO3n3ZTxJ30zuH39rimUggmTwmh2u7wvQsDTHESnmfQ==" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>-->
+    <script type='text/javascript' src="{{url_for('static', filename='libraries/socket.io.js')}}"></script>
+    <script type='text/javascript' src="{{url_for('static', filename='libraries/chart.js')}}"></script>
     <script type="text/javascript" charset="utf-8">
         String.prototype.hashCode = function() {
           var hash = 0,
@@ -106,6 +65,9 @@
 
 			var data_table_body = document.getElementById("data-table-body");
 
+            var ground_altitude_number = document.getElementById("ground-number");
+            var set_ground_altitude = true;
+            ground_altitude_number.value = 0;
 			var record_length_number = document.getElementById("record-number");
 			record_length_number.value = record_length;
 			var average_length_number = document.getElementById("average-number");
@@ -115,13 +77,18 @@
 			var chart_altitude_settings = {dataset_x: "value", dataset_y: "altitude"};
 			var chart_time_settings = {dataset_x: "time", dataset_y: "value"};
 			var chart_settings = chart_altitude_settings;
+
+			var interval_timer = 0;
+
+			var rootselector = document.querySelector(':root');
 			
 			// Chart
 			// We need this object later, so we will create it here
-			//Chart.defaults.backgroundColor = '#9BD0F5';
-            //Chart.defaults.borderColor = '#EAEAEA';
-            Chart.defaults.color = '#EAEAEA';
-            Chart.defaults.font.family = "SourceCodePro";
+			//Chart.defaults.color = '#EAEAEA';
+            //Chart.defaults.color = '#ffa828';
+            Chart.defaults.color = getComputedStyle(rootselector).getPropertyValue("--chart-line-color");
+            Chart.defaults.font.family = getComputedStyle(rootselector).getPropertyValue("--chart-font");
+            // Chart.defaults.font.family = "monospace"; //"SourceCodePro";
             Chart.defaults.font.size = 14;
             var ctx = document.getElementById("chart");
             var chart = new Chart(ctx, {
@@ -185,8 +152,9 @@
 			// TODO: This update-remove-update sequence could be greatly simplified
 			// Ex, it might be possible to pass sample_record directly to the chart to save on the iteration
             socket.on('data', function(data_from_packet) {
-                console.log("Got some data:");
+                console.log("Got some data");
                 for (let samp = 0; samp < data_from_packet.length; samp++) {
+                    console.log("Sample " + samp);
                     for (const [sensor, value] of Object.entries(data_from_packet[samp].sensors)) {
 						// If this is a new sensor, add it to the record and to the table
                         if (!(sensor in sample_record)) {
@@ -228,6 +196,7 @@
                                                     "altitude": data_from_packet[samp]["altitude"],
                                                     "value": data_from_packet[samp]["sensors"][sensor]});
 						// Update table
+						console.log("Updating table");
 						document.getElementById("recent-cell-" + sensor).innerText = Math.round(100 * data_from_packet[samp]["sensors"][sensor]) / 100;
 						// Get average sensor value
 						let sum_val = 0;
@@ -251,7 +220,7 @@
 						}
 						
 						document.getElementById("recent-avg-cell-" + sensor).innerText = Math.round(10 * sum_val / sum_count) / 10;
-						document.getElementById("alt-max-cell-" + sensor).innerText = Math.round(10 * alt_at_max) / 10;
+						document.getElementById("alt-max-cell-" + sensor).innerText = Math.round(10 * (alt_at_max - ground_altitude_number.value)) / 10;
 						sample_record["smoothed-" + sensor].push({"time": sum_time / sum_count,
                                                     "altitude": sum_alt / sum_count,
                                                     "value": sum_val / sum_count});
@@ -264,7 +233,7 @@
 						        alt_at_avg_max = sample_record["smoothed-" + sensor][rsamp]["altitude"];
 						    }
 						}
-						document.getElementById("alt-avg-max-cell-" + sensor).innerText = Math.floor(10 * alt_at_avg_max) / 10;
+						document.getElementById("alt-avg-max-cell-" + sensor).innerText = Math.floor(10 * (alt_at_avg_max - ground_altitude_number.value)) / 10;
 						
 						// Alternative Median-based average. Not used because it didn't seem to be meaningfully different from the standard rolling average
 						/*
@@ -297,7 +266,7 @@
 						let med_time = median(time_list);
 						let med_alt = median(alt_list);
 						document.getElementById("recent-avg-cell-" + sensor).innerText = Math.round(10 * med_val) / 10;
-						document.getElementById("alt-max-cell-" + sensor).innerText = Math.round(10 * alt_at_max) / 10;
+						document.getElementById("alt-max-cell-" + sensor).innerText = Math.round(10 * (alt_at_max - ground_altitude_number.value)) / 10;
 						sample_record["smoothed-" + sensor].push({"time": med_time,
                                                     "altitude": med_alt,
                                                     "value": med_val});
@@ -305,21 +274,29 @@
 							max_avg_val = med_val;
 							alt_at_avg_max = med_alt;
 						}
-						document.getElementById("alt-avg-max-cell-" + sensor).innerText = Math.floor(10 * alt_at_avg_max) / 10;
+						document.getElementById("alt-avg-max-cell-" + sensor).innerText = Math.floor(10 * (alt_at_avg_max - ground_altitude_number.value)) / 10;
 						*/
 						
                     }
 					// Update latest global metrics if this is the most recent packet
-					if (data_from_packet[samp]["time"] > latest_time) {
+					console.log("Update global metrics?");
+					console.log("Packet time is " + data_from_packet[samp]["time"] + ", latest time is " + latest_time);
+					if (true || data_from_packet[samp]["time"] > latest_time) {  // disabled because I would rather have data than not
+					    console.log("Yes; this packet's time is later than the latest time");
 						latest_time = data_from_packet[samp]["time"];
 						latest_altitude = data_from_packet[samp]["altitude"];
-						document.getElementById("altitude-m").innerText = Math.floor(latest_altitude * 100) / 100;
-						document.getElementById("altitude-ft").innerText = Math.floor(latest_altitude * 3.281 * 10) / 10;
+						if (set_ground_altitude) {
+						    ground_altitude_number.value = latest_altitude;
+						    set_ground_altitude = false;
+						}
+						document.getElementById("altitude-m").innerText = Math.floor((latest_altitude - ground_altitude_number.value) * 100) / 100;
+						document.getElementById("altitude-ft").innerText = Math.floor((latest_altitude - ground_altitude_number.value) * 3.281 * 10) / 10;
 						document.getElementById("age").innerText = 0;
 						latest_actual_time = Date.now();
                     }
                 }
-                // Remove old data from the rolling record and update the table
+                // Remove old data from the rolling record
+                console.log("Removing old values");
                 for (const samples of Object.values(sample_record)) {
                     for (let samp = 0; samp < samples.length; samp++) {
                         if (samples[samp]["time"] < latest_time - record_length) {
@@ -329,6 +306,7 @@
                     }
                 }
                 // Update chart with the new data
+                console.log("Update chart");
 				let new_data = {"datasets": []};
 				for (const [sensor, samples] of Object.entries(sample_record)) {
 				    if ((!sensor.includes("smoothed-") && document.getElementById("graph-check-" + sensor).checked) || (sensor.includes("smoothed-") && document.getElementById("graph-check-" + sensor.slice(9)).checked)) {
@@ -339,7 +317,7 @@
                             new_dataset.pointRadius = 0;
                         }
                         for (let samp = 0; samp < sample_record[sensor].length; samp++) {
-                            new_dataset["data"].push({"x": sample_record[sensor][samp][chart_settings.dataset_x], "y": sample_record[sensor][samp][chart_settings.dataset_y]});
+                            new_dataset["data"].push({"x": sample_record[sensor][samp][chart_settings.dataset_x], "y": sample_record[sensor][samp][chart_settings.dataset_y] - (chart_settings.dataset_y == "altitude" ? ground_altitude_number.value : 0)});
                         }
                         new_data.datasets.push(new_dataset);
 					}
@@ -392,10 +370,16 @@
 				while (data_table_body.firstChild) {
 					data_table_body.removeChild(data_table_body.lastChild);
 				}
+				set_ground_altitude = true;
                 return false;
             };
 
             // Handlers for the number inputs
+            ground_altitude_number.oninput = function() {
+                socket.emit('note', "Ground altitude changed to " + ground_altitude_number.value);
+                console.log("Ground altitude changed to " + ground_altitude_number.value);
+            }
+
             record_length_number.oninput = function() {
                 record_length = record_length_number.value;
             }
@@ -428,8 +412,18 @@
 			
             setInterval(function() {
                 // Code to be executed repeatedly
-                document.getElementById("age").innerText = (Date.now() - latest_actual_time)/1000;
-            }, 500); // Updates every 500 milliseconds
+                if (interval_timer > 10) {
+                    document.getElementById("age").innerText = (Date.now() - latest_actual_time)/1000;
+                    interval_timer = 0;
+                }
+                interval_timer = interval_timer + 1;
+
+                // Update CSS variable for randomness
+                let rand = Math.random();
+                let adj_rand = 0.75*Math.pow(rand,16) + 0.25*rand;
+                rootselector.style.setProperty('--random-translation', Math.floor(5 * adj_rand) + "px");
+                rootselector.style.setProperty('--random-brightness', (100 + Math.floor(10 * adj_rand)) + "%")
+            }, 50); // Updates every 500 milliseconds
         });
     </script>
 </head>
@@ -461,10 +455,13 @@
                     <button type="button" id="reset-button">Reset</button>
                 </td>
                 <td>
-                    Record: <input type="number" id="record-number"> (seconds)
+                    Ground: <input type="number" id="ground-number"> (m)
                 </td>
                 <td>
-                    Average: <input type="number" id="average-number"> (seconds)
+                    Record: <input type="number" id="record-number"> (sec)
+                </td>
+                <td>
+                    Average: <input type="number" id="average-number"> (sec)
                 </td>
             </tr>
         </table>
@@ -491,11 +488,11 @@
         <div id="chart-div">
             <canvas id="chart" width="400" height="400"></canvas>
         </div>
-        <div style="text-align: center;">
+        <div style="text-align: center;" id="radio-div">
             <input type="radio" id="alt-radio" name="graph-axis" value="Graph over Altitude" checked="checked">
-			<label for="alt-radio">Altitude-vs-Readings</label>
+            <label for="alt-radio">Altitude-vs-Readings</label>
             <input type="radio" id="time-radio" name="graph-axis" value="Graph over Time">
-			<label for="time-radio">Readings-vs-Time</label>
+            <label for="time-radio">Readings-vs-Time</label>
         </div>
     </div>
 </body>
