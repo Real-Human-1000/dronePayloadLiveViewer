@@ -3,8 +3,8 @@
     --cell-color:#1f1f1f;
     --line-color:#ffa828;
     --reset-color:#1f1f1f;
-    --random-translation:10px;
-    --random-brightness:50%;
+    --random-translation:0px;
+    --random-brightness:100%;
 }
 
 /* something to look into: https://codepen.io/somethingformed/pen/raWJXV?editors=1100 (not currently implemented)*/
@@ -70,3 +70,5 @@ input[type=radio]       {background-color: transparent; color: var(--line-color)
 input[type=checkbox]    {background-color: transparent; color: var(--line-color); accent-color: var(--line-color);}
 
 textarea                {background-color: transparent; font-family: SourceCodePro, sans-serif; color: var(--line-color); width: 90%; height: 20%; border: 2px solid var(--line-color); border-radius: 6px; accent-color: var(--line-color); resize: vertical;}
+
+span#age                {display: inline-block; width: 100px;}

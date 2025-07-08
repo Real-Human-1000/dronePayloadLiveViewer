@@ -1,7 +1,7 @@
 // DAQ Sketch: Take readings from sensors when it's time, collect that into packets, and send them over the radio
 // Define necessary libraries, values, and files
-#define PRINT_SERIAL
-#define PRINT_SENSORS
+//#define PRINT_SERIAL
+//#define PRINT_SENSORS
 //#define SD_LOGGING
 
 #include <Wire.h>
@@ -16,7 +16,7 @@
 
 // BMP388 things
 #include "Adafruit_BMP3XX.h"
-#define SEALEVELPRESSURE_HPA 982.00  // needs to be a value that won't cause the ground to be 0 when the weather barometric pressure changes
+#define SEALEVELPRESSURE_HPA 982.00  // needs to be a value that won't cause the ground to be below 0 when the weather barometric pressure changes
 Adafruit_BMP3XX bmp;
 
 // ENS160 things
@@ -151,9 +151,9 @@ void setup() {
 
   // Set up oversampling and filter initialization
   bmp.setTemperatureOversampling(BMP3_OVERSAMPLING_2X);
-  bmp.setPressureOversampling(BMP3_OVERSAMPLING_8X);
+  bmp.setPressureOversampling(BMP3_OVERSAMPLING_4X);
   bmp.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_3);
-  bmp.setOutputDataRate(BMP3_ODR_25_HZ);
+  bmp.setOutputDataRate(BMP3_ODR_50_HZ);
 
   // ENS160
   bool ok = ens160.begin();
@@ -241,7 +241,9 @@ void setup() {
     #endif
     while (1);
   }
-  LoRa.setSpreadingFactor(9);
+  LoRa.setSpreadingFactor(10);
+  LoRa.setTxPower(20);
+  LoRa.enableCrc();
 
   #ifdef SD_LOGGING
     // if (!sd.begin(SD_CS, SPI_HALF_SPEED)) {
@@ -385,7 +387,7 @@ void loop() {
   } else {
     #ifdef PRINT_SERIAL
       #ifdef PRINT_SENSORS
-        Serial.println("BMP388 perform reading failed");
+        Serial.println(F("BMP388 perform reading failed"));
       #endif
     #endif
   }

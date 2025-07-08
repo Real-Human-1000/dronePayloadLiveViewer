@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Live Viewer</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='retrostyle.css')}}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='defaultstyle.css')}}">
     <!--<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.0.4/socket.io.js" integrity="sha512-aMGMvNYu8Ue4G+fHa359jcPb1u+ytAF+P2SCb+PxrjCdO3n3ZTxJ30zuH39rimUggmTwmh2u7wvQsDTHESnmfQ==" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>-->
     <script type='text/javascript' src="{{url_for('static', filename='libraries/socket.io.js')}}"></script>
@@ -154,7 +154,6 @@
             socket.on('data', function(data_from_packet) {
                 console.log("Got some data");
                 for (let samp = 0; samp < data_from_packet.length; samp++) {
-                    console.log("Sample " + samp);
                     for (const [sensor, value] of Object.entries(data_from_packet[samp].sensors)) {
 						// If this is a new sensor, add it to the record and to the table
                         if (!(sensor in sample_record)) {
@@ -196,7 +195,6 @@
                                                     "altitude": data_from_packet[samp]["altitude"],
                                                     "value": data_from_packet[samp]["sensors"][sensor]});
 						// Update table
-						console.log("Updating table");
 						document.getElementById("recent-cell-" + sensor).innerText = Math.round(100 * data_from_packet[samp]["sensors"][sensor]) / 100;
 						// Get average sensor value
 						let sum_val = 0;
@@ -279,10 +277,7 @@
 						
                     }
 					// Update latest global metrics if this is the most recent packet
-					console.log("Update global metrics?");
-					console.log("Packet time is " + data_from_packet[samp]["time"] + ", latest time is " + latest_time);
 					if (true || data_from_packet[samp]["time"] > latest_time) {  // disabled because I would rather have data than not
-					    console.log("Yes; this packet's time is later than the latest time");
 						latest_time = data_from_packet[samp]["time"];
 						latest_altitude = data_from_packet[samp]["altitude"];
 						if (set_ground_altitude) {
@@ -296,7 +291,6 @@
                     }
                 }
                 // Remove old data from the rolling record
-                console.log("Removing old values");
                 for (const samples of Object.values(sample_record)) {
                     for (let samp = 0; samp < samples.length; samp++) {
                         if (samples[samp]["time"] < latest_time - record_length) {
@@ -306,7 +300,6 @@
                     }
                 }
                 // Update chart with the new data
-                console.log("Update chart");
 				let new_data = {"datasets": []};
 				for (const [sensor, samples] of Object.entries(sample_record)) {
 				    if ((!sensor.includes("smoothed-") && document.getElementById("graph-check-" + sensor).checked) || (sensor.includes("smoothed-") && document.getElementById("graph-check-" + sensor.slice(9)).checked)) {
@@ -361,6 +354,9 @@
 				// Clear record
 				sample_record = {};
 				record_length = 10;  // seconds (actual number of samples in record will change dynamically)
+				average_length = 1;
+				record_length_number.value = record_length;
+				average_length_number.value = average_length;
 				latest_time = 0;
 				latest_altitude = 0;
 				// Clear chart
@@ -421,8 +417,8 @@
                 // Update CSS variable for randomness
                 let rand = Math.random();
                 let adj_rand = 0.75*Math.pow(rand,16) + 0.25*rand;
-                rootselector.style.setProperty('--random-translation', Math.floor(5 * adj_rand) + "px");
-                rootselector.style.setProperty('--random-brightness', (100 + Math.floor(10 * adj_rand)) + "%")
+                //rootselector.style.setProperty('--random-translation', Math.floor(5 * adj_rand) + "px");
+                //rootselector.style.setProperty('--random-brightness', (100 + Math.floor(10 * adj_rand)) + "%")
             }, 50); // Updates every 500 milliseconds
         });
     </script>
@@ -455,18 +451,18 @@
                     <button type="button" id="reset-button">Reset</button>
                 </td>
                 <td>
-                    Ground: <input type="number" id="ground-number"> (m)
+                    Ground: <input type="number" id="ground-number" class="display"> (m)
                 </td>
                 <td>
-                    Record: <input type="number" id="record-number"> (sec)
+                    Record: <input type="number" id="record-number" class="display"> (sec)
                 </td>
                 <td>
-                    Average: <input type="number" id="average-number"> (sec)
+                    Average: <input type="number" id="average-number" class="display"> (sec)
                 </td>
             </tr>
         </table>
         <br>
-        <table id="data-table" class="visible-table">
+        <table id="data-table" class="visible-table display">
             <thead id="data-table-head">
                 <tr id="header-row">
                     <th>Sensor</th>
@@ -481,12 +477,12 @@
             </tbody>
         </table>
         <br>
-        <input type="text" id="notes-input" placeholder="Notes (added to log)...">
+        <input type="text" id="notes-input" class="display" placeholder="Notes (added to log)...">
         <textarea id="message-box" readonly></textarea>
     </div>
     <div class="right-bar">
-        <div id="chart-div">
-            <canvas id="chart" width="400" height="400"></canvas>
+        <div id="chart-div" class="display">
+                <canvas id="chart" width="400" height="400"></canvas>
         </div>
         <div style="text-align: center;" id="radio-div">
             <input type="radio" id="alt-radio" name="graph-axis" value="Graph over Altitude" checked="checked">

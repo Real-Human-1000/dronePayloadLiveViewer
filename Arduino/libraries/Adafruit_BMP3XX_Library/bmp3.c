@@ -873,7 +873,7 @@ int8_t bmp3_set_sensor_settings(uint32_t desired_settings, struct bmp3_dev *dev)
 
     /* Check for null pointer in the device structure*/
     rslt = null_ptr_check(dev);
-
+	
     /* Proceed if null check is fine */
     if (rslt == BMP3_OK)
     {
@@ -2790,9 +2790,9 @@ static int8_t get_err_status(struct bmp3_dev *dev)
 
     if (rslt == BMP3_OK)
     {
-        dev->status.err.cmd = BMP3_GET_BITS_POS_0(reg_data, BMP3_ERR_FATAL);
-        dev->status.err.conf = BMP3_GET_BITS(reg_data, BMP3_ERR_CMD);
-        dev->status.err.fatal = BMP3_GET_BITS(reg_data, BMP3_ERR_CONF);
+        dev->status.err.fatal = BMP3_GET_BITS_POS_0(reg_data, BMP3_ERR_FATAL);
+        dev->status.err.cmd = BMP3_GET_BITS(reg_data, BMP3_ERR_CMD);
+        dev->status.err.conf = BMP3_GET_BITS(reg_data, BMP3_ERR_CONF);
     }
 
     return rslt;

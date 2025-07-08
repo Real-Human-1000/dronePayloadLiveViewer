@@ -3,6 +3,10 @@
     --cell-color:#385648;
     --line-color:#EAEAEA;
     --reset-color:#A6262E;
+    --random-translation:0px;
+    --random-brightness:100%;
+    --chart-font:SourceCodePro;
+    --chart-line-color:#EAEAEA;
 }
 
 @font-face {
@@ -48,3 +52,4 @@ input[type=text]        {background-color: var(--cell-color); font-family: Sourc
 
 textarea                {background-color: var(--cell-color); font-family: SourceCodePro, sans-serif; color: var(--line-color); width: 90%; height: 20%; border: 2px solid var(--line-color); border-radius: 6px; resize: vertical;}
 
+span#age                {display: inline-block; width: 100px;}

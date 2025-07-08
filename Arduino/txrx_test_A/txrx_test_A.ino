@@ -21,7 +21,6 @@
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
 
 void setup() {
-  // initialize digital pin 13 as an output. ???????????
   pinMode(LED_BUILTIN, OUTPUT);
   //pinMode(RFM95_INT, INPUT);
   pinMode(RFM95_RST, OUTPUT);

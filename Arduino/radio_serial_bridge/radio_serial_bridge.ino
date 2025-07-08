@@ -56,7 +56,8 @@ void setup() {
     Serial.println("Starting LoRa failed!");
     while (1);
   }
-  LoRa.setSpreadingFactor(9);
+  LoRa.setSpreadingFactor(10);
+  LoRa.enableCrc();
 }
 
 void loop() {

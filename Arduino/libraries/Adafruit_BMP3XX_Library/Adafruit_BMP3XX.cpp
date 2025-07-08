@@ -348,6 +348,7 @@ bool Adafruit_BMP3XX::performReading(void) {
 #ifdef BMP3XX_DEBUG
   Serial.println("Setting sensor settings");
 #endif
+  //Serial.println("Setting sensor settings");
   rslt = bmp3_set_sensor_settings(settings_sel, &the_sensor);
 
   if (rslt != BMP3_OK)
@@ -358,6 +359,7 @@ bool Adafruit_BMP3XX::performReading(void) {
 #ifdef BMP3XX_DEBUG
   Serial.println(F("Setting power mode"));
 #endif
+  //Serial.println(F("Setting power mode"));
   rslt = bmp3_set_op_mode(&the_sensor);
   if (rslt != BMP3_OK)
     return false;
@@ -370,6 +372,7 @@ bool Adafruit_BMP3XX::performReading(void) {
 #ifdef BMP3XX_DEBUG
   Serial.println(F("Getting sensor data"));
 #endif
+  //Serial.println(F("Getting sensor data"));
   rslt = bmp3_get_sensor_data(sensor_comp, &data, &the_sensor);
   if (rslt != BMP3_OK)
     return false;
