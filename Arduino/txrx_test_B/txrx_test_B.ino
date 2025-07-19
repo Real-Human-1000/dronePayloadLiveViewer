@@ -6,19 +6,69 @@
 // level messaging abilities.
 // It is designed to work with the other example Feather9x_TX
 
+#define PRINT_SERIAL
+
 #include <SPI.h>
 #include <RH_RF95.h>
 
-// Feather 32u4 w/ LoRa:
-#define RFM95_CS   8
-#define RFM95_RST  4
-#define RFM95_INT  7
+// // Feather 32u4 w/ LoRa:
+// #define RFM95_CS   8
+// #define RFM95_RST  4
+// #define RFM95_INT  7
+
+// Feather 32u4 wired to RFM95 breakout:
+#define RFM95_CS   5
+#define RFM95_RST  12
+#define RFM95_INT  0
 
 // Change to 434.0 or other frequency, must match RX's freq!
 #define RF95_FREQ 434.0
 
 // Singleton instance of the radio driver
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
+
+// Single buffer and length of buffer to use for receiving
+uint8_t recv_buf[RH_RF95_MAX_MESSAGE_LEN];
+uint8_t recv_buf_len = sizeof(recv_buf);  // note that this gets reset to the number of bytes received/copied when rf95.recv() is called
+
+// Buffer for the actual message in the most recent packet
+char recv_message[RH_RF95_MAX_MESSAGE_LEN];
+uint8_t recv_message_len = sizeof(recv_buf);  // this will not be reset; memory will just be copied into it
+
+byte blocking_recv() {
+  // Wait for a reply
+  if (rf95.waitAvailableTimeout(3000)) {
+    // Should be a reply message for us now
+    if (rf95.recv(recv_buf, &recv_buf_len)) {
+      #ifdef PRINT_SERIAL
+        Serial.print("recv_buf_len: "); Serial.print(recv_buf_len); Serial.print(", recv_buf: "); Serial.println((char*)recv_buf);
+      #endif
+      if (recv_buf_len > 6) {
+        memcpy(&recv_message, &recv_buf[6], recv_buf_len - 6);
+        recv_message_len = recv_buf_len - 6;
+        #ifdef PRINT_SERIAL
+          Serial.print("recv_message: "); Serial.println(recv_message);
+        #endif
+        return 1;  // set so I can do "if (blocking_recv())"
+      } else {
+        #ifdef PRINT_SERIAL
+          Serial.println("Packet isn't long enough!");
+        #endif
+        return 0;
+      }
+    } else {
+      #ifdef PRINT_SERIAL
+        Serial.println("Receive failed");
+      #endif
+      return 0;
+    }
+  } else {
+    #ifdef PRINT_SERIAL
+      Serial.println("No reply, is there a listener around?");
+    #endif
+    return 0;
+  }
+}
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
@@ -68,16 +118,17 @@ void loop() {
   if (rf95.available()) {
     Serial.println("Packet is available!");
     // Should be a message for us now
-    uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
-    uint8_t len = sizeof(buf);
+    // uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
+    // uint8_t len = sizeof(buf);
 
-    if (rf95.recv(buf, &len)) {
+    if (blocking_recv()) {
       digitalWrite(LED_BUILTIN, HIGH);
-      RH_RF95::printBuffer("Received: ", buf, len);
+      RH_RF95::printBuffer("Received: ", recv_buf, recv_buf_len);
       Serial.print("Got: ");
-      Serial.println((char*)buf);
-       Serial.print("RSSI: ");
+      Serial.println((char*)recv_buf);
+      Serial.print("RSSI: ");
       Serial.println(rf95.lastRssi(), DEC);
+      Serial.println(recv_message);
 
       // Send a reply
       uint8_t data[] = "And hello back to you";
