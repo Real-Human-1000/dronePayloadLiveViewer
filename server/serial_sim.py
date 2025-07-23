@@ -37,18 +37,28 @@ class SerialSim:
         self.input_buffer = b'' #self.generate_data_packet()
         self.output_buffer = b''
 
+    def gaussian(self, x, max, x_at_max, stretching, baseline):
+        return max / (1 + ((x-x_at_max)/stretching)**2.0) + baseline
+
+    def crand(self, amp):
+        # Centered random number (-amp to +amp)
+        return random.random() * 2 * amp - amp
+
     # Simulation functions
     def step_data(self, dt):
         # Step the data forward in time (add randomly to most of the other values)
+        max_alt = 106
+        period = 30
+        alt_noise = 3
         self.latest_packet += random.randint(1,2)
         self.data['time'] += dt
-        self.data['altitude'] = max(250 * (1 - math.cos(0.2 * self.data['time'])) + 3 * random.random(), 0)
-        self.data['CO2'] = 200.0 / (1.0 + ((self.data['altitude']-100.0)/10.0)**2.0) + 400.0 + random.random() * 60.0 - 30.0
+        self.data['altitude'] = max(max_alt/2 * (1 - math.cos(6.28/period * self.data['time'])) + alt_noise * random.random(), 0)
+        self.data['CO2'] = self.gaussian(self.data['altitude'], 400, 100, 10, 400) + self.crand(30.0)
         self.data['temperature'] = max(21.0 + random.random() * 4.0 - 2.0, 0.0)
         self.data['humidity'] = min(max(0.4 + random.random() / 10.0 - 20.05, 0.0), 1.0)
-        self.data['TVOC'] = max(200.0 / (1.0 + ((self.data['altitude']-100.0)/20.0)**2.0) + random.random() * 50.0 - 25.0, 0)
-        self.data['eCO2'] = max(self.data['CO2'] + random.random() * 60.0 - 30.0, 0)
-        self.data['PM'] = max(200.0 / (1.0 + ((self.data['altitude']-90.0)/5.0)**2.0) + 100.0 + random.random() * 200.0 - 100.0, 0)
+        self.data['TVOC'] = self.gaussian(self.data['altitude'], 300, 80, 5, 100) + self.crand(10.0)
+        self.data['eCO2'] = (self.data['TVOC'] / 400 + self.data['CO2'] / 800) * 500
+        self.data['PM'] = self.gaussian(self.data['altitude'], 200, 70, 5, 20) + self.crand(10.0)
         # print(self.data)
 
     def generate_data_packet(self):
@@ -156,7 +166,7 @@ class SerialSim:
     @property
     def in_waiting(self):
         # Get number of bytes in the input buffer
-        if random.random() < 0.9:
+        if random.random() < 0.4:
             # Artificially generate some packets, sometimes
             self.input_buffer += self.generate_random_average_packet()
         return len(self.input_buffer)
