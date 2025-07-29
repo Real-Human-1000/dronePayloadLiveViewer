@@ -3,6 +3,7 @@ import os
 from random import random
 import numpy as np
 
+# Settings as used during tests (don't mess with this)
 coding_rates = [8, 7, 6, 5]
 spreading_factors = [12, 11, 10, 9, 8, 7]#, 6};
 #long bandwidths[10] = {500000, 250000, 125000, 62500, 41700, 31250, 20800, 15600, 10400, 7800};
@@ -24,7 +25,17 @@ def get_bandwidth(index):
     return bandwidths[int(index / (4 * 7)) % 10]
 
 
-log_filename = os.path.join("raw_serial_logs", f"log_2025-07-17_13-29-18.json")
+# PARAMETERS:
+# first test / log_2025-07-17_13-29-18.json or second test / log_2025-07-17_13-47-09.json
+log_filename = os.path.join("../server/raw_serial_logs", f"log_2025-07-17_13-47-09.json")
+dependent_var = "SNR"  # RSSI, SNR, or freq_error
+dependent_var_nice = "Frequency Error" if dependent_var == "freq_error" else dependent_var
+horiz_dist = 1086  # 627 (first test / log_2025-07-17_13-29-18.json) or 1086 (second test / log_2025-07-17_13-47-09.json)
+altitude = 350
+jitter = 0.0
+separation = 0.0
+selected_bandwidth = 125000  # 125000 is the only one we have complete data for
+
 
 with open(log_filename, 'r') as file:
     lines = file.readlines()
@@ -56,10 +67,6 @@ for i in range(len(lines)):
 
 print(data_points)
 
-dependent_var = "RSSI"
-dependent_var_nice = "Frequency Error" if dependent_var == "freq_error" else dependent_var
-jitter = 0.0
-separation = 0.0
 xi = []
 yi = []
 zi = []
@@ -69,17 +76,17 @@ yr = []
 zr = []
 cr = []
 for i in range(last_setting):
-    if abs(get_bandwidth(i) - 125000) < 10:
+    if abs(get_bandwidth(i) - selected_bandwidth) < 100:
         if len(data_points[i]["initiator_points"]) > 0:
             xi.append(get_coding_rate(data_points[i]["setting_idx"]) + jitter*(2*random()-1) - separation)
             yi.append(get_spreading_factor(data_points[i]["setting_idx"]) + jitter*(2*random()-1) - separation)
             zi.append(get_bandwidth(data_points[i]["setting_idx"]) + jitter*(2*random()-1) - separation)
-            ci.append(abs(data_points[i]["initiator_points"][0][dependent_var]))
+            ci.append(data_points[i]["initiator_points"][0][dependent_var])
         if len(data_points[i]["responder_points"]) > 0:
             xr.append(get_coding_rate(data_points[i]["setting_idx"]) + jitter*(2*random()-1) + separation)
             yr.append(get_spreading_factor(data_points[i]["setting_idx"]) + jitter*(2*random()-1) + separation)
             zr.append(get_bandwidth(data_points[i]["setting_idx"]) + jitter*(2*random()-1) + separation)
-            cr.append(abs(data_points[i]["responder_points"][0][dependent_var]))
+            cr.append(data_points[i]["responder_points"][0][dependent_var])
 
 
 # r_cmap = plt.get_cmap('Reds')
@@ -109,17 +116,18 @@ def make_contour(x, y, c, descriptor):
         C[int(n_rows * (x[i] - x_min) / ((x_max + 1) - x_min)), int(n_cols * (y[i] - y_min) / ((y_max + 1) - y_min))] = c[i]
 
     cont = ax.contourf(X, Y, C, levels=100)
-    fig.colorbar(cont, ax=ax)
+    cbar = fig.colorbar(cont, ax=ax)
+    cbar.set_label(f"{dependent_var_nice}", rotation=270, labelpad=15)
 
     ax.set_xlabel("Coding Rate")
     ax.set_ylabel("Spreading Factor")
     # ax.set_zlabel("Bandwidth")
 
     # fig.suptitle(f"{dependent_var_nice} vs Coding Rate, Spreading Factor, and Bandwidth")
-    fig.suptitle(f"{dependent_var_nice} vs Coding Rate and Spreading Factor {descriptor}")
+    fig.suptitle(f"{dependent_var_nice} vs CR and SF at BW {selected_bandwidth} Hz\n{descriptor}")
 
     plt.show()
 
 
-make_contour(xi, yi, ci, descriptor="for Initiator")
-make_contour(xr, yr, cr, descriptor="for Responder")
+make_contour(xi, yi, ci, descriptor=f"for Initiator at {horiz_dist} ft horiz, {altitude} ft vert distance (total {(horiz_dist**2 + altitude**2)**0.5:.01f} ft)")
+make_contour(xr, yr, cr, descriptor=f"for Responder at {horiz_dist} ft horiz, {altitude} ft vert distance (total {(horiz_dist**2 + altitude**2)**0.5:.01f} ft)")

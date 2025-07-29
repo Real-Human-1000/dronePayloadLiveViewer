@@ -29,7 +29,7 @@ html                    {box-sizing: border-box; }
 *, *:before, *:after    {box-sizing: inherit;}
 body                    {background: var(--body-bg-color); color: var(--print-line-color); font-family: monospace;}
 
-div.right-bar           {height: 95%; width: 40%; position: fixed; top: 15px; right: 15px; overflow-x: hidden; border: 8px ridge var(--box-border-color); font-weight: normal; border-radius: 2px; background-image: url("svg/grime.svg");}
+div.right-bar           {height: 95%; width: 40%; position: fixed; top: 15px; right: 15px; overflow-x: hidden; border: 8px ridge var(--box-border-color); background: var(--box-bg-color); font-weight: normal; border-radius: 2px;}
 div.left-bar            {height: 95%; width: 58%; position: fixed; top: 15px; left: 15px; overflow-x: hidden; border: 8px ridge var(--box-border-color); background: var(--box-bg-color); font-weight: normal; border-radius: 2px;}
 div#chart-div           {height: 95%; width: 100%; border: 16px inset var(--box-border-color); border-radius: 2px;}
 

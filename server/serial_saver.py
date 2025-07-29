@@ -16,7 +16,7 @@ log_filename = os.path.join("raw_serial_logs", f"log_{datetime.now().strftime('%
 # was still about 400ft away when the last successful test happened
 # got stuck on the way back
 
-# test 2: 1086 feet away, 350 ftt up
+# test 2: 1086 feet away, 350 ft up
 
 # both tests have groundstation under a metal structure
 

@@ -3,9 +3,7 @@ from flask_socketio import SocketIO, emit
 from threading import Lock
 from serial import Serial
 from serial_sim import SerialSim
-import numpy as np
 import struct
-import random
 from time import time_ns
 from datetime import datetime
 import json
@@ -17,6 +15,9 @@ import sys
 # And https://projecthub.arduino.cc/ansh2919/serial-communication-between-python-and-arduino-663756
 
 # Set up Serial to communicate with Feather
+#!!!!!!!!!!!!!!!! Change Serial() to SerialSim() or back in order to use or not use the simulated data (ex for testing)!!!!!!!!!!!!!!!!!!
+# You will probably have to change the port from COM14 to something else depending on your computer (check every time you plug the board into the computer)
+# Use Device Manager or Arduino IDE to see which port the board decided to connect to
 s = SerialSim(port="COM14", baudrate=115200, timeout=0.5)  # change when we actually start talking with Feather
 all_samples = {}
 # {"sensor": [{"interptime": #, "time": #, "altitude": #, "value": #}, {"interptime": #, "time": #, "altitude": #, "value": #}], "sensor": ...}

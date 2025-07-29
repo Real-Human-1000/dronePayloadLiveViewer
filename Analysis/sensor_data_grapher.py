@@ -94,11 +94,11 @@ def graph_altitude(log_data, dependent_vars, graph_in_feet=False):
 
 
 def main():
-    log_filename = "logs\\log_2025-07-04_21-44-57.json"
+    log_filename = "../server/logs/log_2025-07-04_21-44-57.json"
     log_data = load_log(log_filename)
 
     independent_var = "altitude"
-    dependent_vars = ["HUM"]
+    dependent_vars = ["CO2"]
 
     # graph_simple(log_data, independent_var, dependent_vars)
 
