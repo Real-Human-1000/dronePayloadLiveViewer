@@ -3,7 +3,7 @@ import numpy as np
 
 # Script to run through heat transfer calculations
 # to estimate the temperature that particles will be at when the reach the passive sampler
-# Inspired by a particle in S3-D that appears to be fully embedded in the carbon tape
+# Inspired by a particle in the S3-D field that appears to be fully embedded in the carbon tape
 
 # 100% Known physical constants
 air_gas_constant = 287.058  # J / kg * K
@@ -21,11 +21,18 @@ distance = 500  # m
 particle_dia = 34.8e-6  # m
 env_temp = 300  # K
 air_pressure = 101325  # Pa, assuming standard pressure
-# Particle parameters
-particle_thermal_cond = 0.15  # W / m * K
-particle_density = 3640  # kg/m^3
-particle_specific_heat = 290  # J/kg * K
+
+# MgAl2O4 Particle parameters
+# particle_thermal_cond = 0.15  # W / m * K
+# particle_density = 3640  # kg/m^3
+# particle_specific_heat = 290  # J/kg * K
+# particle_start_temp = 1366.5  # K
+
+# Pure MgAl alloy particle parameters
+particle_thermal_cond = 100  # W / m K
 particle_start_temp = 1366.5  # K
+particle_density = 2726.0 - 0.99 * (particle_start_temp + env_temp) / 2
+particle_specific_heat = 1000  # J / kg K
 
 # Begin calculation
 air_density = air_pressure / (air_gas_constant * env_temp)  # Ideal gas law

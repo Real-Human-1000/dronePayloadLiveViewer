@@ -5,6 +5,7 @@ from shutil import rmtree, copy
 import os
 from time import sleep
 
+# This script loads data from a CSV (originally a spreadsheet with information about every particle) and attempts to perform some cluster analysis
 # This all could be done much more easily using Pandas
 
 filename = "Particle Element Analysis - MaxData.csv"
