@@ -7,7 +7,6 @@ import colorsys
 # As an additional feature, it will automatically remove any ugly labels from the graph and create a clean version
 # Open the report document in Word, click on the report graph, copy it, and paste it in DirtyGraphImages
 # The script will ask you to type a number in because I don't want to make my venv instance 3 times bigger by installing Keras or smth
-# Just deal with it
 
 
 def color_distance(col1, col2):
