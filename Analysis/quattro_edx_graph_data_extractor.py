@@ -176,10 +176,10 @@ for filename in os.listdir(input_dir):
             print(notif[:-2])
 
         # Save the data in a CSV file for use with Sheets, Excel, other scripts, etc.
-        with open(os.path.join(output_dir, filename[:-4] + "_data.csv"), 'w') as csv_file:
-            csv_file.write("eV,Upper Bound,Lower Bound\n")
-            for point in range(len(x_values)):
-                csv_file.write(f"{(x_values[point] - origin_point[0]) * x_unit_value},{(origin_point[1] - upper_bounds[point]) * y_unit_value},{(origin_point[1] - lower_bounds[point]) * y_unit_value}\n")
+        # with open(os.path.join(output_dir, filename[:-4] + "_data.csv"), 'w') as csv_file:
+        #     csv_file.write("eV,Upper Bound,Lower Bound\n")
+        #     for point in range(len(x_values)):
+        #         csv_file.write(f"{(x_values[point] - origin_point[0]) * x_unit_value},{(origin_point[1] - upper_bounds[point]) * y_unit_value},{(origin_point[1] - lower_bounds[point]) * y_unit_value}\n")
 
         # Render the clean graph, either as an image or as an interactive Matplotlib graph
         render = "IMAGE"# "MATPLOTLIB"
@@ -263,5 +263,5 @@ for filename in os.listdir(input_dir):
 
                 canvas.line(((x_pos, lower_y), (x_pos, upper_y)), line_color)
 
-            # new_image.show()
-            new_image.save(os.path.join(output_dir, filename), format="PNG")
+            new_image.show()
+            # new_image.save(os.path.join(output_dir, filename), format="PNG")
